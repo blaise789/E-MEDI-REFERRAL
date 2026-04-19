@@ -1,0 +1,243 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  
+}
+
+enum Role {
+  CLINICIAN
+  FOCAL_PERSON
+  HOSPITAL_ADMIN
+  SYS_ADMIN
+}
+
+enum HospitalLevel {
+  DISTRICT
+  REFERRAL
+}
+
+enum WardType {
+  GENERAL_MEDICAL
+  SURGICAL
+  ICU
+  HDU
+  MATERNITY
+  PEDIATRIC
+}
+
+enum SpecialistDiscipline {
+  GENERAL_SURGERY
+  ORTHOPEDIC_SURGERY
+  OBSTETRICS_GYNECOLOGY
+  INTERNAL_MEDICINE
+  PEDIATRICS
+  NEUROLOGY
+  ANESTHESIA
+  INTENSIVE_CARE
+}
+
+enum SpecialistStatus {
+  AVAILABLE
+  IN_THEATRE
+  ON_CALL
+  UNAVAILABLE
+}
+
+enum ReferralUrgency {
+  ROUTINE
+  EMERGENCY
+}
+
+enum ReferralStatus {
+  SUBMITTED
+  ACCEPTED
+  REJECTED
+  IN_TRANSIT
+  ADMITTED
+  COUNTER_REFERRED
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model File {
+  id           String   @id @default(uuid())
+  name         String
+  originalName String   @map("original_name")
+  url          String
+  folder       String
+  type         String
+  users        User[]   @relation("UserProfilePicture")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("files")
+}
+
+model Hospital {
+  id            String        @id @default(uuid())
+  name          String        @unique
+  level         HospitalLevel
+  location      String
+  contactNumber String?       @map("contact_number")
+
+  users       User[]
+  beds        BedCapacity[]
+  specialists Specialist[]
+
+  // Referrals
+  referralsSent     Referral[] @relation("ReferringHospital")
+  referralsReceived Referral[] @relation("ReceivingHospital")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("hospitals")
+}
+
+model User {
+  id        String  @id @default(uuid())
+  firstName String  @map("first_name")
+  lastName  String  @map("last_name")
+  email     String  @unique
+  password  String
+  role      Role    @default(CLINICIAN)
+  telephone String?
+
+  hospitalId String?   @map("hospital_id")
+  hospital   Hospital? @relation(fields: [hospitalId], references: [id])
+
+  profilePictureId String? @map("profile_picture_id")
+  profilePicture   File?   @relation("UserProfilePicture", fields: [profilePictureId], references: [id])
+
+  referralsInitiated Referral[] @relation("InitiatingUser")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model BedCapacity {
+  id           String   @id @default(uuid())
+  wardType     WardType @map("ward_type")
+  totalBeds    Int      @map("total_beds")
+  occupiedBeds Int      @default(0) @map("occupied_beds")
+
+  hospitalId String   @map("hospital_id")
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([hospitalId, wardType])
+  @@map("bed_capacities")
+}
+
+model Specialist {
+  id         String               @id @default(uuid())
+  firstName  String               @map("first_name")
+  lastName   String               @map("last_name")
+  discipline SpecialistDiscipline
+  status     SpecialistStatus     @default(UNAVAILABLE)
+
+  hospitalId String   @map("hospital_id")
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("specialists")
+}
+
+model Patient {
+  id            String   @id @default(uuid())
+  nationalId    String?  @unique @map("national_id")
+  firstName     String   @map("first_name")
+  lastName      String   @map("last_name")
+  dateOfBirth   DateTime @map("date_of_birth")
+  gender        String
+  contactNumber String?  @map("contact_number")
+
+  referrals Referral[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("patients")
+}
+
+model Referral {
+  id        String  @id @default(uuid())
+  patientId String  @map("patient_id")
+  patient   Patient @relation(fields: [patientId], references: [id])
+
+  referringHospitalId String   @map("referring_hospital_id")
+  referringHospital   Hospital @relation("ReferringHospital", fields: [referringHospitalId], references: [id])
+
+  receivingHospitalId String   @map("receiving_hospital_id")
+  receivingHospital   Hospital @relation("ReceivingHospital", fields: [receivingHospitalId], references: [id])
+
+  initiatedById String @map("initiated_by_id")
+  initiatedBy   User   @relation("InitiatingUser", fields: [initiatedById], references: [id])
+
+  urgency ReferralUrgency
+  status  ReferralStatus  @default(SUBMITTED)
+
+  reasonForTransfer    String  @map("reason_for_transfer")
+  diagnosis            String
+  preTransferTreatment String? @map("pre_transfer_treatment")
+  transportType        String? @map("transport_type")
+
+  counterReferral CounterReferral?
+
+  logs AuditLog[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("referrals")
+}
+
+model CounterReferral {
+  id         String   @id @default(uuid())
+  referralId String   @unique @map("referral_id")
+  referral   Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
+
+  dischargeNotes       String @map("discharge_notes")
+  followUpInstructions String @map("follow_up_instructions")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("counter_referrals")
+}
+
+model Notification {
+  id          String  @id @default(uuid())
+  message     String
+  isRead      Boolean @default(false) @map("is_read")
+  recipientId String  @map("recipient_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("notifications")
+}
+
+model AuditLog {
+  id            String  @id @default(uuid())
+  action        String
+  entity        String? // e.g., "Referral", "BedCapacity"
+  entityId      String? @map("entity_id")
+  details       String?
+  performedById String? @map("performed_by_id")
+
+  referralId String?   @map("referral_id")
+  referral   Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("audit_logs")
+}
