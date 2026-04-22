@@ -12,7 +12,7 @@ export class NotificationsController {
 
   @ApiOperation({
     summary: 'Get current user notifications',
-    description: 'Returns all notifications for the authenticated user, sorted by most recent first. Includes referral status changes, new referral assignments, and counter-referral alerts.',
+    description: 'Returns all notifications for the authenticated user, sorted by most recent first.',
   })
   @ApiResponse({ status: 200, description: 'Notifications list returned.' })
   @Get()
@@ -20,14 +20,25 @@ export class NotificationsController {
     return this.notificationsService.getUserNotifications(req.user.id);
   }
 
-  @ApiOperation({
-    summary: 'Mark notification as read',
-    description: 'Sets the isRead flag to true for a specific notification.',
-  })
+  @ApiOperation({ summary: 'Get unread notification count' })
+  @ApiResponse({ status: 200, description: 'Unread count returned.' })
+  @Get('unread-count')
+  getUnreadCount(@Req() req) {
+    return this.notificationsService.getUnreadCount(req.user.id);
+  }
+
+  @ApiOperation({ summary: 'Mark a notification as read' })
   @ApiParam({ name: 'id', description: 'Notification UUID' })
   @ApiResponse({ status: 200, description: 'Notification marked as read.' })
   @Patch(':id/read')
   markAsRead(@Param('id') id: string) {
     return this.notificationsService.markAsRead(id);
+  }
+
+  @ApiOperation({ summary: 'Mark all notifications as read' })
+  @ApiResponse({ status: 200, description: 'All notifications marked as read.' })
+  @Patch('read-all')
+  markAllAsRead(@Req() req) {
+    return this.notificationsService.markAllAsRead(req.user.id);
   }
 }

@@ -2,9 +2,10 @@ import { Module } from '@nestjs/common';
 import { HospitalsController } from './hospitals.controller';
 import { PrismaModule } from '../../../prisma/prisma.module';
 import { HospitalsService } from './hospitals.service';
+import { CaslModule } from '../casl/casl.module';
 
 @Module({
-  imports: [PrismaModule],
+  imports: [PrismaModule, CaslModule],
   controllers: [HospitalsController],
   providers: [HospitalsService],
   exports: [HospitalsService]

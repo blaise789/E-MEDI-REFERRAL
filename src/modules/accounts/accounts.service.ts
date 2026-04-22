@@ -24,7 +24,7 @@ export class AccountsService {
       throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
     }
 
-    const payload = { id: user.id, email: user.email, role: user.role };
+    const payload = { id: user.id, email: user.email, role: user.role, hospitalId: user.hospitalId };
     return {
       access_token: this.jwtService.sign(payload),
       user: payload,
@@ -49,7 +49,7 @@ export class AccountsService {
       },
     });
 
-    const payload = { id: user.id, email: user.email, role: user.role };
+    const payload = { id: user.id, email: user.email, role: user.role, hospitalId: user.hospitalId };
     return {
       access_token: this.jwtService.sign(payload),
       user: payload,

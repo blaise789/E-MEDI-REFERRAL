@@ -12,6 +12,12 @@ export class NotificationsService {
     });
   }
 
+  async getUnreadCount(userId: string) {
+    return this.prisma.notification.count({
+      where: { recipientId: userId, isRead: false },
+    });
+  }
+
   async markAsRead(id: string) {
     return this.prisma.notification.update({
       where: { id },
@@ -19,13 +25,39 @@ export class NotificationsService {
     });
   }
 
-  // Internal helper to create notifications for other modules to use
-  async dispatchNotification(userId: string, message: string) {
+  async markAllAsRead(userId: string) {
+    return this.prisma.notification.updateMany({
+      where: { recipientId: userId, isRead: false },
+      data: { isRead: true },
+    });
+  }
+
+  /**
+   * Send a notification to a single user.
+   */
+  async dispatchNotification(recipientId: string, message: string) {
     return this.prisma.notification.create({
-      data: {
-        recipientId: userId,
+      data: { recipientId, message },
+    });
+  }
+
+  /**
+   * Send a notification to all staff at a given hospital.
+   * Used when a referral is submitted, accepted, rejected, etc.
+   */
+  async notifyHospitalStaff(hospitalId: string, message: string) {
+    const users = await this.prisma.user.findMany({
+      where: { hospitalId },
+      select: { id: true },
+    });
+
+    if (users.length === 0) return;
+
+    await this.prisma.notification.createMany({
+      data: users.map((user) => ({
+        recipientId: user.id,
         message,
-      },
+      })),
     });
   }
 }

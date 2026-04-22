@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Patch, Body, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Param, Patch, Body, UseGuards, Req } from '@nestjs/common';
 import { HospitalsService } from './hospitals.service';
 import { CreateHospitalDto } from './dto/create-hospital.dto';
 import { AddBedCapacityDto } from './dto/add-bed-capacity.dto';
@@ -7,9 +7,16 @@ import { AuthGuard } from '../../guards/auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { SpecialistStatus } from '@prisma/client';
 
+import { RolesGuard } from '../../guards/roles.guard';
+import { PoliciesGuard } from '../../guards/policies.guard';
+import { Roles } from '../../decorators/roles.decorator';
+import { CheckPolicies } from '../../decorators/policies.decorator';
+import { Action } from '../casl/casl-ability.factory';
+import { Role } from '@prisma/client';
+
 @ApiTags('hospitals')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard, PoliciesGuard)
 @Controller('hospitals')
 export class HospitalsController {
   constructor(private readonly hospitalsService: HospitalsService) {}
@@ -22,6 +29,7 @@ export class HospitalsController {
   })
   @ApiResponse({ status: 201, description: 'Hospital created successfully.' })
   @ApiResponse({ status: 409, description: 'Hospital with this name already exists.' })
+  @Roles(Role.SYS_ADMIN)
   @Post()
   create(@Body() createHospitalDto: CreateHospitalDto) {
     return this.hospitalsService.create(createHospitalDto);
@@ -71,9 +79,10 @@ export class HospitalsController {
   })
   @ApiParam({ name: 'hospitalId', description: 'Hospital UUID' })
   @ApiResponse({ status: 201, description: 'Bed capacity added.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Post(':hospitalId/beds')
-  addBedCapacity(@Param('hospitalId') hospitalId: string, @Body() dto: AddBedCapacityDto) {
-    return this.hospitalsService.addBedCapacity(hospitalId, dto);
+  addBedCapacity(@Param('hospitalId') hospitalId: string, @Body() dto: AddBedCapacityDto, @Req() req) {
+    return this.hospitalsService.addBedCapacity(hospitalId, dto, req.user);
   }
 
   @ApiOperation({
@@ -82,9 +91,10 @@ export class HospitalsController {
   })
   @ApiParam({ name: 'bedId', description: 'BedCapacity UUID' })
   @ApiResponse({ status: 200, description: 'Bed occupancy updated.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Patch('beds/:bedId')
-  updateBedCapacity(@Param('bedId') bedId: string, @Body('occupiedBeds') occupiedBeds: number) {
-    return this.hospitalsService.updateBedCapacity(bedId, occupiedBeds);
+  updateBedCapacity(@Param('bedId') bedId: string, @Body('occupiedBeds') occupiedBeds: number, @Req() req) {
+    return this.hospitalsService.updateBedCapacity(bedId, occupiedBeds, req.user);
   }
 
   // ──────────────────────────────── Specialist Management ────────────────────────────────
@@ -95,9 +105,10 @@ export class HospitalsController {
   })
   @ApiParam({ name: 'hospitalId', description: 'Hospital UUID' })
   @ApiResponse({ status: 201, description: 'Specialist registered.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Post(':hospitalId/specialists')
-  addSpecialist(@Param('hospitalId') hospitalId: string, @Body() dto: AddSpecialistDto) {
-    return this.hospitalsService.addSpecialist(hospitalId, dto);
+  addSpecialist(@Param('hospitalId') hospitalId: string, @Body() dto: AddSpecialistDto, @Req() req) {
+    return this.hospitalsService.addSpecialist(hospitalId, dto, req.user);
   }
 
   @ApiOperation({
@@ -106,11 +117,13 @@ export class HospitalsController {
   })
   @ApiParam({ name: 'specialistId', description: 'Specialist UUID' })
   @ApiResponse({ status: 200, description: 'Specialist status updated.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Patch('specialists/:specialistId')
   updateSpecialistStatus(
     @Param('specialistId') specialistId: string,
     @Body('status') status: SpecialistStatus,
+    @Req() req
   ) {
-    return this.hospitalsService.updateSpecialistStatus(specialistId, status);
+    return this.hospitalsService.updateSpecialistStatus(specialistId, status, req.user);
   }
 }

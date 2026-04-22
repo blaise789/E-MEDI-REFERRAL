@@ -6,21 +6,30 @@ import { AuthGuard } from '../../guards/auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ReferralStatus } from '@prisma/client';
 
+import { RolesGuard } from '../../guards/roles.guard';
+import { PoliciesGuard } from '../../guards/policies.guard';
+import { Roles } from '../../decorators/roles.decorator';
+import { CheckPolicies } from '../../decorators/policies.decorator';
+import { Action } from '../casl/casl-ability.factory';
+import { Role } from '@prisma/client';
+
 @ApiTags('referrals')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard, PoliciesGuard)
 @Controller('referrals')
 export class ReferralsController {
   constructor(private readonly referralsService: ReferralsService) {}
 
   @ApiOperation({
     summary: 'Submit a new referral',
-    description: 'Initiates a patient referral from a district hospital to a national referral hospital (CHUK/RMH). Automatically creates an audit log entry. The referral includes INHSRG-required fields: reason for transfer, diagnosis, pre-transfer treatment, and transport type.',
+    description: 'Creates a new patient referral by specifying the referring hospital (referringHospitalId) and the receiving hospital (receivingHospitalId), along with patient details, urgency level, diagnosis, and reason for transfer.',
   })
   @ApiResponse({ status: 201, description: 'Referral created successfully.' })
+  @Roles(Role.CLINICIAN, Role.SYS_ADMIN)
+  @CheckPolicies((ability) => ability.can(Action.Create, 'Referral'))
   @Post()
   create(@Body() createReferralDto: CreateReferralDto, @Req() req) {
-    return this.referralsService.create(createReferralDto, req.user.id);
+    return this.referralsService.create(createReferralDto, req.user);
   }
 
   @ApiOperation({
@@ -40,9 +49,10 @@ export class ReferralsController {
   })
   @ApiParam({ name: 'id', description: 'Referral UUID' })
   @ApiResponse({ status: 200, description: 'Referral status updated.' })
+  @CheckPolicies((ability) => ability.can(Action.Update, 'Referral'))
   @Patch(':id/status')
   updateStatus(@Param('id') id: string, @Body('status') status: ReferralStatus, @Req() req) {
-    return this.referralsService.updateStatus(id, status, req.user.id);
+    return this.referralsService.updateStatus(id, status, req.user);
   }
 
   @ApiOperation({
@@ -53,6 +63,6 @@ export class ReferralsController {
   @ApiResponse({ status: 201, description: 'Counter-referral created. Referral status set to COUNTER_REFERRED.' })
   @Post(':id/counter')
   addCounterReferral(@Param('id') id: string, @Body() dto: CreateCounterReferralDto, @Req() req) {
-    return this.referralsService.addCounterReferral(id, dto, req.user.id);
+    return this.referralsService.addCounterReferral(id, dto, req.user);
   }
 }

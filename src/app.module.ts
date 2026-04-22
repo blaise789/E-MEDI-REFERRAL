@@ -11,6 +11,9 @@ import { ReferralsModule } from './modules/referrals/referrals.module';
 import { NotificationsModule } from './modules/notifications/notifications.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { AuditModule } from './modules/audit/audit.module';
+import { PatientsModule } from './modules/patients/patients.module';
+import { CaslModule } from './modules/casl/casl.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -33,6 +36,9 @@ import { AuditModule } from './modules/audit/audit.module';
     NotificationsModule,
     ReportsModule,
     AuditModule,
+    PatientsModule,
+    UsersModule,
+    CaslModule,
   ],
 
   controllers: [],

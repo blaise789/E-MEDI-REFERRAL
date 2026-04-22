@@ -2,10 +2,14 @@ import { Controller, Get, UseGuards } from '@nestjs/common';
 import { AuditService } from './audit.service';
 import { AuthGuard } from '../../guards/auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { RolesGuard } from '../../guards/roles.guard';
+import { Roles } from '../../decorators/roles.decorator';
+import { Role } from '@prisma/client';
 
 @ApiTags('audit')
 @ApiBearerAuth()
-@UseGuards(AuthGuard)
+@UseGuards(AuthGuard, RolesGuard)
+@Roles(Role.SYS_ADMIN)
 @Controller('audit')
 export class AuditController {
   constructor(private readonly auditService: AuditService) {}
