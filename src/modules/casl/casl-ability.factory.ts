@@ -49,12 +49,14 @@ export class CaslAbilityFactory {
       can(Action.Manage, 'Hospital', { id: user.hospitalId } as any);
       can(Action.Manage, 'BedCapacity', { hospitalId: user.hospitalId } as any);
       can(Action.Manage, 'Specialist', { hospitalId: user.hospitalId } as any);
+      can(Action.Create, 'Referral');
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
       can(Action.Update, 'Referral', { referringHospitalId: user.hospitalId } as any);
     } else if (user.role === Role.FOCAL_PERSON) {
       can(Action.Read, 'all');
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
       can(Action.Update, 'Referral', { referringHospitalId: user.hospitalId } as any);
+      can(Action.Create, 'Referral');
       can(Action.Manage, 'BedCapacity', { hospitalId: user.hospitalId } as any);
       can(Action.Manage, 'Specialist', { hospitalId: user.hospitalId } as any);
     } else if (user.role === Role.CLINICIAN) {
@@ -81,19 +83,22 @@ export class CaslAbilityFactory {
       detectSubjectType: (item) => {
         if (typeof item === 'string') return item as Subjects;
         
-        // Try to get type from __typename or constructor
-        const type = (item as any).__typename || (item as any).constructor.name;
-        
-        if (type && type !== 'Object') return type as Subjects;
+        // Handle objects created with subject() helper or containing __typename
+        const type = (item as any).__caslSubjectType__ || (item as any).__typename;
+        if (type) return type as Subjects;
 
-        // Robust property-based fallback for Prisma objects
+        // Try to get type from constructor name if not a plain Object
+        const constructorName = (item as any).constructor.name;
+        if (constructorName && constructorName !== 'Object') return constructorName as Subjects;
+
+        // Robust property-based fallback for Prisma objects and partial objects
         if ((item as any).patientId && (item as any).referringHospitalId) return 'Referral';
-        if ((item as any).wardType && (item as any).totalBeds !== undefined) return 'BedCapacity';
-        if ((item as any).discipline && (item as any).status !== undefined) return 'Specialist';
+        if ((item as any).wardType !== undefined || (item as any).totalBeds !== undefined) return 'BedCapacity';
+        if ((item as any).discipline !== undefined || (item as any).status !== undefined) return 'Specialist';
         if ((item as any).level && (item as any).location) return 'Hospital';
         if ((item as any).email && (item as any).role) return 'User';
         
-        return type as Subjects;
+        return 'all'; // Fallback
       }
     });
   }

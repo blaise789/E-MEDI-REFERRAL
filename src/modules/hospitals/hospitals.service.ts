@@ -5,6 +5,7 @@ import { AddBedCapacityDto } from './dto/add-bed-capacity.dto';
 import { AddSpecialistDto } from './dto/add-specialist.dto';
 import { SpecialistStatus } from '@prisma/client';
 import { CaslAbilityFactory, Action } from '../casl/casl-ability.factory';
+import { subject } from '@casl/ability';
 
 @Injectable()
 export class HospitalsService {
@@ -98,8 +99,21 @@ export class HospitalsService {
    */
   async addBedCapacity(hospitalId: string, dto: AddBedCapacityDto, user: any) {
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, 'BedCapacity', { hospitalId } as any)) {
+    if (!ability.can(Action.Manage, subject('BedCapacity', { hospitalId } as any))) {
       throw new ForbiddenException('You are not authorized to manage beds for this hospital');
+    }
+
+    const existing = await this.prisma.bedCapacity.findUnique({
+      where: {
+        hospitalId_wardType: {
+          hospitalId,
+          wardType: dto.wardType,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new HttpException(`Ward type ${dto.wardType} already exists for this facility. Update the existing ward instead.`, HttpStatus.CONFLICT);
     }
 
     return this.prisma.bedCapacity.create({
@@ -119,7 +133,7 @@ export class HospitalsService {
     if (!bed) throw new HttpException('Bed config not found', HttpStatus.NOT_FOUND);
 
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, 'BedCapacity', bed as any)) {
+    if (!ability.can(Action.Manage, subject('BedCapacity', bed as any))) {
       throw new ForbiddenException('You are not authorized to update beds for this hospital');
     }
 
@@ -134,7 +148,7 @@ export class HospitalsService {
    */
   async addSpecialist(hospitalId: string, dto: AddSpecialistDto, user: any) {
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, 'Specialist', { hospitalId } as any)) {
+    if (!ability.can(Action.Manage, subject('Specialist', { hospitalId } as any))) {
       throw new ForbiddenException('You are not authorized to add specialists for this hospital');
     }
 
@@ -156,7 +170,7 @@ export class HospitalsService {
     if (!specialist) throw new HttpException('Specialist not found', HttpStatus.NOT_FOUND);
 
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, 'Specialist', specialist as any)) {
+    if (!ability.can(Action.Manage, subject('Specialist', specialist as any))) {
       throw new ForbiddenException('You are not authorized to update specialists for this hospital');
     }
 

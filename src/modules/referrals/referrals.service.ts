@@ -8,6 +8,7 @@ import { CreateCounterReferralDto } from './dto/create-counter-referral.dto';
 import { ReferralStatus } from '@prisma/client';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CaslAbilityFactory, Action } from '../casl/casl-ability.factory';
+import { subject } from '@casl/ability';
 
 @Injectable()
 export class ReferralsService {
@@ -122,7 +123,7 @@ export class ReferralsService {
     }
 
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Update, existingReferral as any)) {
+    if (!ability.can(Action.Update, subject('Referral', existingReferral as any))) {
       const details = `User Hospital: ${user.hospitalId}, Recipient: ${existingReferral.receivingHospitalId}, Sender: ${existingReferral.referringHospitalId}`;
       throw new ForbiddenException(`You are not authorized to update this referral. [Security Context: ${details}]`);
     }
@@ -167,7 +168,7 @@ export class ReferralsService {
     }
 
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Update, existingReferral as any)) {
+    if (!ability.can(Action.Update, subject('Referral', existingReferral as any))) {
       throw new ForbiddenException('You are not authorized to add a counter-referral to this referral');
     }
 
@@ -233,6 +234,7 @@ export class ReferralsService {
     doc.fillColor("#1e40af").fontSize(12).font("Helvetica-Bold").text("PATIENT IDENTIFICATION");
     doc.fillColor("#000000").fontSize(10).font("Helvetica");
     doc.text(`Full Name: ${referral.patient.firstName} ${referral.patient.lastName}`);
+    doc.text(`Insurance: ${referral.patient.insurance || 'None / Out-of-pocket'}`);
     doc.text(`National ID: ${referral.patient.nationalId || 'N/A'}`);
     doc.text(`Gender: ${referral.patient.gender}`);
     doc.text(`DOB: ${format(new Date(referral.patient.dateOfBirth), 'PPP')}`);

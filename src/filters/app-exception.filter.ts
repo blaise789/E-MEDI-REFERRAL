@@ -3,75 +3,54 @@ import {
   Catch,
   ExceptionFilter,
   HttpException,
+  HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Response } from 'express';
-import { Server } from 'http';
 import ServerResponse from 'src/utils/ServerResponse';
 
-@Catch(HttpException)
+@Catch()
 export class AppExceptionFilter implements ExceptionFilter {
-  catch(exception: HttpException, host: ArgumentsHost) {
+  private readonly logger = new Logger('ExceptionFilter');
+
+  catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const status = exception.getStatus();
-    if (status === 400) {
-      if (exception.getResponse() instanceof Object) {
-        if (exception.getResponse()['message'][0].length === 1) {
-          return response
-            .status(status)
-            .json(ServerResponse.error(exception.getResponse()['message']));
-        }
-        return response
-          .status(status)
-          .json(ServerResponse.error(exception.getResponse()['message'][0]));
-      } else if (exception.getResponse() instanceof String) {
-        return response
-          .status(status)
-          .json(ServerResponse.error(exception.getResponse().toString()));
-      }
-      return response
-        .status(status)
-        .json(
-          ServerResponse.error(
-            exception.getResponse().toString(),
-            exception.getResponse(),
-          ),
-        );
-    } else if (status === 401) {
-      response
-        .status(status)
-        .json(
-          ServerResponse.error(
-            exception.getResponse()['message'],
-            exception.getResponse(),
-          ),
-        );
-    } else if (status === 404) {
-      response
-        .status(status)
-        .json(
-          ServerResponse.error(
-            exception.getResponse()['message'],
-            exception.getResponse(),
-          ),
-        );
-    } else if (status === 403) {
-      response
-        .status(status)
-        .json(ServerResponse.error('Forbidden', exception.getResponse()));
-    } else if (status === 500) {
-      response
-        .status(status)
-        .json(
-          ServerResponse.error(
-            'internal server error',
-            exception.getResponse(),
-          ),
-        );
+    
+    let status = HttpStatus.INTERNAL_SERVER_ERROR;
+    let message: any = 'Internal server error';
+    let details: any = null;
+
+    if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      const resPayload = exception.getResponse();
+      message = typeof resPayload === 'object' ? resPayload['message'] || exception.message : resPayload;
+      details = resPayload;
     } else {
-      response
-        .status(status)
-        .json(ServerResponse.error('Error occured', exception));
+      // Handle non-HTTP exceptions (like Prisma, Typecasting errors, etc.)
+      this.logger.error('Unhandled Exception Caught:', (exception as Error).stack);
+      message = (exception as Error).message || 'An unexpected error occurred';
     }
+
+    // Comprehensive response formatting
+    if (status === 400) {
+       const msg = Array.isArray(message) ? message[0] : message;
+       return response.status(status).json(ServerResponse.error(msg, details));
+    }
+
+    if (status === 403) {
+      return response.status(status).json(ServerResponse.error('Access Forbidden', details || 'You do not have permission for this action'));
+    }
+
+    if (status === 500) {
+      this.logger.error(`500 Error: ${message}`, details);
+    }
+
+    response.status(status).json(
+      ServerResponse.error(
+        Array.isArray(message) ? message[0] : message,
+        details,
+      ),
+    );
   }
 }

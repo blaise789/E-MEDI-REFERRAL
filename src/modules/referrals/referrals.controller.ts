@@ -25,7 +25,7 @@ export class ReferralsController {
     description: 'Creates a new patient referral by specifying the referring hospital (referringHospitalId) and the receiving hospital (receivingHospitalId), along with patient details, urgency level, diagnosis, and reason for transfer.',
   })
   @ApiResponse({ status: 201, description: 'Referral created successfully.' })
-  @Roles(Role.CLINICIAN, Role.SYS_ADMIN)
+  @Roles(Role.CLINICIAN, Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @CheckPolicies((ability) => ability.can(Action.Create, 'Referral'))
   @Post()
   create(@Body() createReferralDto: CreateReferralDto, @Req() req) {
@@ -41,17 +41,6 @@ export class ReferralsController {
   @Get()
   findAll(@Query('hospitalId') hospitalId?: string) {
     return this.referralsService.findAll(hospitalId);
-  }
-
-  @ApiOperation({
-    summary: "Get referral details",
-    description: "Returns a complete referral record including patient data, hospital relations, audit logs, and counter-referral notes.",
-  })
-  @ApiParam({ name: "id", description: "Referral UUID" })
-  @ApiResponse({ status: 200, description: "Referral details returned." })
-  @Get(":id")
-  findOne(@Param("id") id: string) {
-    return this.referralsService.findOne(id);
   }
 
   @ApiOperation({
@@ -86,5 +75,16 @@ export class ReferralsController {
   @Get(":id/pdf")
   async downloadPdf(@Param("id") id: string, @Res() res: any) {
     return this.referralsService.generatePdf(id, res);
+  }
+
+  @ApiOperation({
+    summary: "Get referral details",
+    description: "Returns a complete referral record including patient data, hospital relations, audit logs, and counter-referral notes.",
+  })
+  @ApiParam({ name: "id", description: "Referral UUID" })
+  @ApiResponse({ status: 200, description: "Referral details returned." })
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.referralsService.findOne(id);
   }
 }

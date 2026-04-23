@@ -23,6 +23,11 @@ export class CreatePatientDto {
   @IsString()
   gender: string;
 
+  @ApiProperty({ required: false, example: 'RSSB (RAMA)' })
+  @IsOptional()
+  @IsString()
+  insurance?: string;
+
   @ApiProperty({ required: false, example: '+250788123456' })
   @IsOptional()
   @IsString()
