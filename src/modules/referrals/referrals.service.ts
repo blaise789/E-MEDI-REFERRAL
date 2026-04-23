@@ -1,4 +1,7 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
+import PDFDocument from 'pdfkit';
+import { Response } from 'express';
+import { format } from 'date-fns';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { CreateReferralDto } from './dto/create-referral.dto';
 import { CreateCounterReferralDto } from './dto/create-counter-referral.dto';
@@ -48,6 +51,49 @@ export class ReferralsService {
     return referral;
   }
 
+  async findOne(id: string) {
+    const referral = await this.prisma.referral.findUnique({
+      where: { id },
+      include: {
+        patient: true,
+        receivingHospital: {
+          include: {
+            beds: true,
+            specialists: true,
+          },
+        },
+        referringHospital: true,
+        initiatedBy: {
+          select: {
+            firstName: true,
+            lastName: true,
+            email: true,
+            role: true,
+          },
+        },
+        counterReferral: true,
+        logs: {
+          include: {
+            performedBy: {
+              select: {
+                firstName: true,
+                lastName: true,
+                role: true,
+              },
+            },
+          },
+          orderBy: { createdAt: "desc" },
+        },
+      },
+    });
+
+    if (!referral) {
+      throw new ForbiddenException("Referral not found");
+    }
+
+    return referral;
+  }
+
   async findAll(hospitalId?: string) {
     return this.prisma.referral.findMany({
       where: hospitalId ? {
@@ -77,7 +123,8 @@ export class ReferralsService {
 
     const ability = this.caslAbilityFactory.createForUser(user);
     if (!ability.can(Action.Update, existingReferral as any)) {
-      throw new ForbiddenException('You are not authorized to update this referral');
+      const details = `User Hospital: ${user.hospitalId}, Recipient: ${existingReferral.receivingHospitalId}, Sender: ${existingReferral.referringHospitalId}`;
+      throw new ForbiddenException(`You are not authorized to update this referral. [Security Context: ${details}]`);
     }
 
     const referral = await this.prisma.referral.update({
@@ -159,5 +206,70 @@ export class ReferralsService {
     );
 
     return counterReferral;
+  }
+
+  async generatePdf(id: string, res: Response) {
+    const referral = await this.findOne(id);
+
+    const doc = new PDFDocument({ margin: 50, size: 'A4' });
+
+    // Stream to response
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename=Referral_${id.substring(0, 8)}.pdf`);
+    doc.pipe(res);
+
+    // Header
+    doc.fillColor('#1e40af').fontSize(20).text('DIGITAL REFERRAL SYSTEM', { align: 'center' });
+    doc.fontSize(10).fillColor('#64748b').text('Rwanda Healthcare Network - Continuity of Care Record', { align: 'center' });
+    doc.moveDown();
+    doc.rect(50, doc.y, 500, 2).fill('#e2e8f0');
+    doc.moveDown(2);
+
+    // Document Title
+    doc.fillColor('#000000').fontSize(16).text('DISCHARGE & COUNTER-REFERRAL SUMMARY', { underline: true });
+    doc.moveDown();
+
+    // Section: Patient Information
+    doc.fillColor("#1e40af").fontSize(12).font("Helvetica-Bold").text("PATIENT IDENTIFICATION");
+    doc.fillColor("#000000").fontSize(10).font("Helvetica");
+    doc.text(`Full Name: ${referral.patient.firstName} ${referral.patient.lastName}`);
+    doc.text(`National ID: ${referral.patient.nationalId || 'N/A'}`);
+    doc.text(`Gender: ${referral.patient.gender}`);
+    doc.text(`DOB: ${format(new Date(referral.patient.dateOfBirth), 'PPP')}`);
+    doc.moveDown();
+
+    // Section: Clinical Summary
+    doc.fillColor('#1e40af').fontSize(12).text('CLINICAL SUMMARY');
+    doc.fillColor('#000000').fontSize(10);
+    doc.text(`Primary Diagnosis: ${referral.diagnosis}`);
+    doc.text(`Reason for Transfer: ${referral.reasonForTransfer}`);
+    doc.text(`Urgency: ${referral.urgency}`);
+    doc.moveDown();
+
+    // Section: Facility Chain
+    doc.fillColor('#1e40af').fontSize(12).text('TRANSFER CHAIN');
+    doc.fillColor('#000000').fontSize(10);
+    doc.text(`Referring Hospital: ${referral.referringHospital.name} (${referral.referringHospital.location})`);
+    doc.text(`Receiving Hospital: ${referral.receivingHospital.name} (${referral.receivingHospital.location})`);
+    doc.moveDown();
+
+    // Section: Counter-Referral Details (The loop closer)
+    if (referral.counterReferral) {
+      doc.rect(50, doc.y, 500, 100).stroke('#1e40af').fillOpacity(0.05).fill('#f8fafc').fillOpacity(1);
+      doc.moveDown(0.5);
+      doc.fillColor('#1e40af').fontSize(12).text('DISCHARGE NOTES & FOLLOW-UP', { indent: 10 });
+      doc.fillColor('#000000').fontSize(10);
+      doc.text(`Notes: ${referral.counterReferral.dischargeNotes}`, { indent: 10 });
+      doc.text(`Follow-up instructions: ${referral.counterReferral.followUpInstructions}`, { indent: 10 });
+    } else {
+      doc.fillColor('#f43f5e').text('Pending counter-referral notes.');
+    }
+    doc.moveDown(2);
+
+    // Footer
+    doc.fontSize(8).fillColor('#94a3b8').text('Generated by Antigravity Referral System', 50, 750, { align: 'center' });
+    doc.text(`Date of Generation: ${format(new Date(), 'PPP p')}`, { align: 'center' });
+
+    doc.end();
   }
 }

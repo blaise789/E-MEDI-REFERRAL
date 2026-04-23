@@ -1,4 +1,4 @@
-import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
@@ -13,21 +13,38 @@ export class AccountsService {
   ) {}
 
   async login(loginDto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
+    const user = await this.prisma.user.findFirst({
       where: { email: loginDto.email },
+      include: {
+        hospital: {
+          select: {
+            name: true,
+            level: true,
+            location: true,
+          },
+        },
+      },
     });
-    if (!user) {
-      throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
-    }
-    const isPasswordValid = await bcrypt.compare(loginDto.password, user.password);
-    if (!isPasswordValid) {
-      throw new HttpException('Invalid credentials', HttpStatus.UNAUTHORIZED);
+
+    if (!user || !(await bcrypt.compare(loginDto.password, user.password))) {
+      throw new UnauthorizedException("Invalid email or password");
     }
 
-    const payload = { id: user.id, email: user.email, role: user.role, hospitalId: user.hospitalId };
+    const payload = {
+      id: user.id,
+      email: user.email,
+      role: user.role,
+      hospitalId: user.hospitalId,
+    };
     return {
       access_token: this.jwtService.sign(payload),
-      user: payload,
+      user: {
+        ...payload,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        telephone: user.telephone,
+        hospital: user.hospital,
+      },
     };
   }
 
@@ -68,6 +85,13 @@ export class AccountsService {
         hospitalId: true,
         telephone: true,
         createdAt: true,
+        hospital: {
+          select: {
+            name: true,
+            level: true,
+            location: true,
+          },
+        },
       },
     });
     if (!user) {

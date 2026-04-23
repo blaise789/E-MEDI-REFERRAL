@@ -37,12 +37,20 @@ export class CaslAbilityFactory {
     >(Ability as AbilityClass<AppAbility>);
 
     if (user.role === Role.SYS_ADMIN) {
-      can(Action.Manage, 'all'); 
+      can(Action.Manage, 'Hospital');
+      can(Action.Manage, 'User');
+      can(Action.Manage, 'AuditLog');
+      can(Action.Read, 'Referral'); // Impartial observer for clinical data
+      can(Action.Read, 'Patient');
+      can(Action.Read, 'BedCapacity');
+      can(Action.Read, 'Specialist');
     } else if (user.role === Role.HOSPITAL_ADMIN) {
       can(Action.Read, 'all');
       can(Action.Manage, 'Hospital', { id: user.hospitalId } as any);
       can(Action.Manage, 'BedCapacity', { hospitalId: user.hospitalId } as any);
       can(Action.Manage, 'Specialist', { hospitalId: user.hospitalId } as any);
+      can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
+      can(Action.Update, 'Referral', { referringHospitalId: user.hospitalId } as any);
     } else if (user.role === Role.FOCAL_PERSON) {
       can(Action.Read, 'all');
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
@@ -73,18 +81,18 @@ export class CaslAbilityFactory {
       detectSubjectType: (item) => {
         if (typeof item === 'string') return item as Subjects;
         
-        // Custom detection for Prisma plain objects
-        const type = (item as any).__typename || (item as any).constructor.name || (item as any).entity;
+        // Try to get type from __typename or constructor
+        const type = (item as any).__typename || (item as any).constructor.name;
         
-        // Fallback for objects that might have been fetched from Prisma directly
-        if (!type || type === 'Object') {
-           if ((item as any).patientId && (item as any).referringHospitalId) return 'Referral';
-           if ((item as any).wardType) return 'BedCapacity';
-           if ((item as any).discipline) return 'Specialist';
-           if ((item as any).level && (item as any).location) return 'Hospital';
-        }
+        if (type && type !== 'Object') return type as Subjects;
 
-        console.log(`[CASL] Detected subject type: ${type} for object:`, item);
+        // Robust property-based fallback for Prisma objects
+        if ((item as any).patientId && (item as any).referringHospitalId) return 'Referral';
+        if ((item as any).wardType && (item as any).totalBeds !== undefined) return 'BedCapacity';
+        if ((item as any).discipline && (item as any).status !== undefined) return 'Specialist';
+        if ((item as any).level && (item as any).location) return 'Hospital';
+        if ((item as any).email && (item as any).role) return 'User';
+        
         return type as Subjects;
       }
     });

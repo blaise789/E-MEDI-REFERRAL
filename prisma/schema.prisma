@@ -115,6 +115,7 @@ model User {
   profilePicture   File?   @relation("UserProfilePicture", fields: [profilePictureId], references: [id])
 
   referralsInitiated Referral[] @relation("InitiatingUser")
+  auditLogs          AuditLog[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -233,6 +234,7 @@ model AuditLog {
   entityId      String? @map("entity_id")
   details       String?
   performedById String? @map("performed_by_id")
+  performedBy   User?   @relation(fields: [performedById], references: [id], onDelete: SetNull)
 
   referralId String?   @map("referral_id")
   referral   Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)

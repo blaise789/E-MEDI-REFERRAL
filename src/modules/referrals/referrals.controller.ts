@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, Query } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, Query, Res } from '@nestjs/common';
 import { ReferralsService } from './referrals.service';
 import { CreateReferralDto } from './dto/create-referral.dto';
 import { CreateCounterReferralDto } from './dto/create-counter-referral.dto';
@@ -44,6 +44,17 @@ export class ReferralsController {
   }
 
   @ApiOperation({
+    summary: "Get referral details",
+    description: "Returns a complete referral record including patient data, hospital relations, audit logs, and counter-referral notes.",
+  })
+  @ApiParam({ name: "id", description: "Referral UUID" })
+  @ApiResponse({ status: 200, description: "Referral details returned." })
+  @Get(":id")
+  findOne(@Param("id") id: string) {
+    return this.referralsService.findOne(id);
+  }
+
+  @ApiOperation({
     summary: 'Update referral status',
     description: 'Transitions a referral to a new status: ACCEPTED, REJECTED, IN_TRANSIT, or ADMITTED. Each transition is logged in the audit trail.',
   })
@@ -57,12 +68,23 @@ export class ReferralsController {
 
   @ApiOperation({
     summary: 'Submit a counter-referral',
-    description: 'Completes the referral feedback loop by providing discharge notes and follow-up instructions from the receiving hospital back to the referring district hospital. This is a key INHSRG requirement for continuity of care.',
+    description: 'Completes the referral feedback loop by providing discharge notes and follow-up instructions from the receiving hospital back to the referring district hospital.',
   })
   @ApiParam({ name: 'id', description: 'Referral UUID' })
-  @ApiResponse({ status: 201, description: 'Counter-referral created. Referral status set to COUNTER_REFERRED.' })
+  @ApiResponse({ status: 201, description: 'Counter-referral created.' })
   @Post(':id/counter')
   addCounterReferral(@Param('id') id: string, @Body() dto: CreateCounterReferralDto, @Req() req) {
     return this.referralsService.addCounterReferral(id, dto, req.user);
+  }
+
+  @ApiOperation({
+    summary: "Download counter-referral PDF",
+    description: "Generates and streams a professional clinical discharge summary (PDF) for the given referral.",
+  })
+  @ApiParam({ name: "id", description: "Referral UUID" })
+  @ApiResponse({ status: 200, description: "PDF file stream." })
+  @Get(":id/pdf")
+  async downloadPdf(@Param("id") id: string, @Res() res: any) {
+    return this.referralsService.generatePdf(id, res);
   }
 }
