@@ -21,6 +21,9 @@ async function bootstrap() {
   app.useGlobalFilters(new AppExceptionFilter());
   app.enableCors({ origin: '*' });
 
+  const { IoAdapter } = require('@nestjs/platform-socket.io');
+  app.useWebSocketAdapter(new IoAdapter(app));
+
   const config = new DocumentBuilder()
     .setTitle('Digital Referral Management Platform')
     .setDescription(

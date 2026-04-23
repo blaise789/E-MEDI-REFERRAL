@@ -1,9 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { ClinicalGateway } from '../hospitals/clinical.gateway';
 
 @Injectable()
 export class NotificationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly gateway: ClinicalGateway,
+  ) {}
 
   async getUserNotifications(userId: string) {
     return this.prisma.notification.findMany({
@@ -36,9 +40,18 @@ export class NotificationsService {
    * Send a notification to a single user.
    */
   async dispatchNotification(recipientId: string, message: string) {
-    return this.prisma.notification.create({
+    const notification = await this.prisma.notification.create({
       data: { recipientId, message },
     });
+
+    // Broadcast live
+    this.gateway.broadcastNotification(recipientId, {
+      id: notification.id,
+      message,
+      createdAt: notification.createdAt,
+    });
+
+    return notification;
   }
 
   /**
@@ -58,6 +71,14 @@ export class NotificationsService {
         recipientId: user.id,
         message,
       })),
+    });
+
+    // Broadcast to all (could be optimized with rooms)
+    users.forEach((user) => {
+      this.gateway.broadcastNotification(user.id, {
+        message,
+        hospitalId,
+      });
     });
   }
 }

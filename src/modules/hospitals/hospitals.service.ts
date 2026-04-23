@@ -6,12 +6,14 @@ import { AddSpecialistDto } from './dto/add-specialist.dto';
 import { SpecialistStatus } from '@prisma/client';
 import { CaslAbilityFactory, Action } from '../casl/casl-ability.factory';
 import { subject } from '@casl/ability';
+import { ClinicalGateway } from './clinical.gateway';
 
 @Injectable()
 export class HospitalsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
+    private readonly clinicalGateway: ClinicalGateway,
   ) {}
 
   /**
@@ -137,10 +139,34 @@ export class HospitalsService {
       throw new ForbiddenException('You are not authorized to update beds for this hospital');
     }
 
-    return this.prisma.bedCapacity.update({
+    const updated = await this.prisma.bedCapacity.update({
       where: { id: bedId },
       data: { occupiedBeds },
     });
+
+    this.clinicalGateway.broadcastCapacityUpdate(updated.hospitalId, updated);
+    return updated;
+  }
+
+  /**
+   * Manually force a specific bed occupancy (Admin Override).
+   */
+  async recalibrateBedCapacity(bedId: string, occupiedBeds: number, user: any) {
+    const ability = this.caslAbilityFactory.createForUser(user);
+    const bed = await this.prisma.bedCapacity.findUnique({ where: { id: bedId } });
+    if (!bed) throw new HttpException('Bed config not found', HttpStatus.NOT_FOUND);
+
+    if (!ability.can(Action.Manage, subject('BedCapacity', bed as any))) {
+      throw new ForbiddenException('You are not authorized to recalibrate beds for this hospital');
+    }
+
+    const updated = await this.prisma.bedCapacity.update({
+      where: { id: bedId },
+      data: { occupiedBeds },
+    });
+
+    this.clinicalGateway.broadcastCapacityUpdate(updated.hospitalId, updated);
+    return updated;
   }
 
   /**
@@ -174,9 +200,12 @@ export class HospitalsService {
       throw new ForbiddenException('You are not authorized to update specialists for this hospital');
     }
 
-    return this.prisma.specialist.update({
+    const updated = await this.prisma.specialist.update({
       where: { id: specialistId },
       data: { status },
     });
+
+    this.clinicalGateway.broadcastSpecialistUpdate(updated.hospitalId, updated);
+    return updated;
   }
 }

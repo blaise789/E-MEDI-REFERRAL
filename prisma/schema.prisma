@@ -56,6 +56,7 @@ enum ReferralStatus {
   REJECTED
   IN_TRANSIT
   ADMITTED
+  DISCHARGED
   COUNTER_REFERRED
 }
 
@@ -187,10 +188,11 @@ model Referral {
   urgency ReferralUrgency
   status  ReferralStatus  @default(SUBMITTED)
 
-  reasonForTransfer    String  @map("reason_for_transfer")
+  reasonForTransfer    String          @map("reason_for_transfer")
+  targetWardType       WardType?        @map("target_ward_type")
   diagnosis            String
-  preTransferTreatment String? @map("pre_transfer_treatment")
-  transportType        String? @map("transport_type")
+  preTransferTreatment String?          @map("pre_transfer_treatment")
+  transportType        String?          @map("transport_type")
 
   counterReferral CounterReferral?
 

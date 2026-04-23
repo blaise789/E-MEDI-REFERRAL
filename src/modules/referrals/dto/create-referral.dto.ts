@@ -18,6 +18,11 @@ export class CreateReferralDto {
   @ApiProperty({ enum: ReferralUrgency })
   @IsEnum(ReferralUrgency)
   urgency: ReferralUrgency;
+  
+  @ApiProperty({ enum: ['GENERAL_MEDICAL', 'SURGICAL', 'ICU', 'HDU', 'PAEDIATRICS', 'MATERNITY', 'EMERGENCY_DEPT'] })
+  @IsOptional()
+  @IsEnum(['GENERAL_MEDICAL', 'SURGICAL', 'ICU', 'HDU', 'PAEDIATRICS', 'MATERNITY', 'EMERGENCY_DEPT'])
+  targetWardType?: any;
 
   @ApiProperty()
   @IsString()

@@ -3,6 +3,7 @@ import { HospitalsService } from './hospitals.service';
 import { CreateHospitalDto } from './dto/create-hospital.dto';
 import { AddBedCapacityDto } from './dto/add-bed-capacity.dto';
 import { AddSpecialistDto } from './dto/add-specialist.dto';
+import { RecalibrateBedDto } from './dto/recalibrate-bed.dto';
 import { AuthGuard } from '../../guards/auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { SpecialistStatus } from '@prisma/client';
@@ -95,6 +96,13 @@ export class HospitalsController {
   @Patch('beds/:bedId')
   updateBedCapacity(@Param('bedId') bedId: string, @Body('occupiedBeds') occupiedBeds: number, @Req() req) {
     return this.hospitalsService.updateBedCapacity(bedId, occupiedBeds, req.user);
+  }
+
+  @ApiOperation({ summary: 'Force recalibrate bed occupancy (Admin Only)' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
+  @Patch('beds/:bedId/recalibrate')
+  recalibrate(@Param('bedId') bedId: string, @Body() dto: RecalibrateBedDto, @Req() req) {
+    return this.hospitalsService.recalibrateBedCapacity(bedId, dto.occupiedBeds, req.user);
   }
 
   // ──────────────────────────────── Specialist Management ────────────────────────────────
