@@ -20,7 +20,7 @@ export class PatientsController {
   })
   @ApiResponse({ status: 201, description: 'Patient registered successfully.' })
   @ApiResponse({ status: 409, description: 'Patient with this national ID already exists.' })
-  @Roles(Role.CLINICIAN, Role.SYS_ADMIN)
+  @Roles(Role.CLINICIAN, Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Post()
   create(@Body() dto: CreatePatientDto) {
     return this.patientsService.create(dto);

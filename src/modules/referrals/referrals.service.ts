@@ -182,6 +182,31 @@ export class ReferralsService {
       }
     }
 
+    // 3. Automate Specialist Status on Lifecycle Events
+    if (existingReferral.targetSpecialistId) {
+      if (status === "ACCEPTED") {
+        const spec = await this.prisma.specialist.update({
+          where: { id: existingReferral.targetSpecialistId },
+          data: { status: "ON_CALL" },
+        });
+        this.clinicalGateway.broadcastSpecialistUpdate(existingReferral.receivingHospitalId, spec);
+      } else if (status === "ADMITTED") {
+        const spec = await this.prisma.specialist.update({
+          where: { id: existingReferral.targetSpecialistId },
+          data: { status: "IN_THEATRE" },
+        });
+        this.clinicalGateway.broadcastSpecialistUpdate(existingReferral.receivingHospitalId, spec);
+      } else if (status === "DISCHARGED" || status === "COUNTER_REFERRED") {
+        if (existingReferral.status === "ADMITTED" || existingReferral.status === "ACCEPTED") {
+          const spec = await this.prisma.specialist.update({
+            where: { id: existingReferral.targetSpecialistId },
+            data: { status: "AVAILABLE" },
+          });
+          this.clinicalGateway.broadcastSpecialistUpdate(existingReferral.receivingHospitalId, spec);
+        }
+      }
+    }
+
     const referral = await this.prisma.referral.update({
       where: { id },
       data: { status },
@@ -254,6 +279,15 @@ export class ReferralsService {
         existingReferral.receivingHospitalId,
         ward,
       );
+    }
+
+    // 4. Free up Specialist
+    if (existingReferral.targetSpecialistId) {
+      const spec = await this.prisma.specialist.update({
+        where: { id: existingReferral.targetSpecialistId },
+        data: { status: "AVAILABLE" },
+      });
+      this.clinicalGateway.broadcastSpecialistUpdate(existingReferral.receivingHospitalId, spec);
     }
 
     const counterReferral = await this.prisma.counterReferral.create({

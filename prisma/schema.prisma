@@ -148,6 +148,8 @@ model Specialist {
   hospitalId String   @map("hospital_id")
   hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
 
+  referrals Referral[]
+
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@map("specialists")
@@ -190,6 +192,8 @@ model Referral {
 
   reasonForTransfer    String          @map("reason_for_transfer")
   targetWardType       WardType?        @map("target_ward_type")
+  targetSpecialistId   String?          @map("target_specialist_id")
+  targetSpecialist     Specialist?      @relation(fields: [targetSpecialistId], references: [id])
   diagnosis            String
   preTransferTreatment String?          @map("pre_transfer_treatment")
   transportType        String?          @map("transport_type")
