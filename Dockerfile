@@ -18,7 +18,8 @@ RUN npm prune --production
 FROM base AS runner
 WORKDIR /app
 
-RUN apk add --no-cache curl openssl tini
+# Removed curl since healthcheck isn't needed manually for Railway
+RUN apk add --no-cache openssl tini
 
 ENV NODE_ENV=production \
     PORT=3000
@@ -38,9 +39,6 @@ RUN mkdir -p uploads/profiles logs && \
 USER nodejs
 
 EXPOSE 3000
-
-HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:${PORT}/health || exit 1
 
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["sh", "-c", "npx prisma migrate deploy && node dist/src/main.js"]
