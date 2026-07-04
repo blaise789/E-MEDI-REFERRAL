@@ -81,4 +81,15 @@ export class NotificationsService {
       });
     });
   }
+
+  /**
+   * Send an email notification to a patient after a referral is created.
+   * Wire a real email provider (nodemailer, SendGrid, etc.) here when ready.
+   */
+  async sendPatientEmail(patient: any, referral: any) {
+    if (!patient?.email) return;
+    const message = `Dear ${patient.firstName} ${patient.lastName}, a referral has been submitted on your behalf from ${referral.referringHospital?.name} to ${referral.receivingHospital?.name}. Referral ID: ${referral.id.substring(0, 8)}.`;
+    // TODO: replace with a real email provider (nodemailer / SendGrid / SES)
+    console.log(`[EMAIL] To: ${patient.email} | ${message}`);
+  }
 }

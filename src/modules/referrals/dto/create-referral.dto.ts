@@ -1,6 +1,10 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { ReferralUrgency } from '@prisma/client';
 import { IsString, IsEnum, IsOptional } from 'class-validator';
+
+enum TransportType {
+  AMBULANCE = 'AMBULANCE',
+  PRIVATE = 'PRIVATE',
+}
 
 export class CreateReferralDto {
   @ApiProperty()
@@ -15,14 +19,10 @@ export class CreateReferralDto {
   @IsString()
   receivingHospitalId: string;
 
-  @ApiProperty({ enum: ReferralUrgency })
-  @IsEnum(ReferralUrgency)
-  urgency: ReferralUrgency;
-  
-  @ApiProperty({ required: false, enum: ['GENERAL_MEDICAL', 'SURGICAL', 'ICU', 'HDU', 'MATERNITY', 'PEDIATRIC'] })
+  @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  targetWardType?: any;
+  targetWardType?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
@@ -42,8 +42,8 @@ export class CreateReferralDto {
   @IsString()
   preTransferTreatment?: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, enum: TransportType, default: TransportType.AMBULANCE })
   @IsOptional()
-  @IsString()
-  transportType?: string;
+  @IsEnum(TransportType)
+  transportType?: TransportType;
 }

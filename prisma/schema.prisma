@@ -40,21 +40,12 @@ enum SpecialistDiscipline {
 
 enum SpecialistStatus {
   AVAILABLE
-  IN_THEATRE
-  ON_CALL
   UNAVAILABLE
 }
 
-enum ReferralUrgency {
-  ROUTINE
-  EMERGENCY
-}
 
 enum ReferralStatus {
   SUBMITTED
-  ACCEPTED
-  REJECTED
-  IN_TRANSIT
   ADMITTED
   DISCHARGED
   COUNTER_REFERRED
@@ -88,6 +79,7 @@ model Hospital {
   users       User[]
   beds        BedCapacity[]
   specialists Specialist[]
+  patients    Patient[]
 
   // Referrals
   referralsSent     Referral[] @relation("ReferringHospital")
@@ -157,13 +149,18 @@ model Specialist {
 
 model Patient {
   id            String   @id @default(uuid())
-  nationalId    String?  @unique @map("national_id")
+  nationalId    String   @unique @map("national_id")
   firstName     String   @map("first_name")
   lastName      String   @map("last_name")
   dateOfBirth   DateTime @map("date_of_birth")
   gender        String
   insurance     String?
   contactNumber String?  @map("contact_number")
+  email         String?
+  isActive      Boolean  @default(true) @map("is_active")
+
+  hospitalId String?   @map("hospital_id")
+  hospital   Hospital? @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
 
   referrals Referral[]
 
@@ -187,7 +184,6 @@ model Referral {
   initiatedById String @map("initiated_by_id")
   initiatedBy   User   @relation("InitiatingUser", fields: [initiatedById], references: [id])
 
-  urgency ReferralUrgency
   status  ReferralStatus  @default(SUBMITTED)
 
   reasonForTransfer    String      @map("reason_for_transfer")

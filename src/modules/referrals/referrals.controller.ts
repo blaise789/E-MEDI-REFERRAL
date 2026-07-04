@@ -22,7 +22,7 @@ export class ReferralsController {
 
   @ApiOperation({
     summary: 'Submit a new referral',
-    description: 'Creates a new patient referral by specifying the referring hospital (referringHospitalId) and the receiving hospital (receivingHospitalId), along with patient details, urgency level, diagnosis, and reason for transfer.',
+    description: 'Creates a new patient referral by specifying the referring hospital (referringHospitalId) and the receiving hospital (receivingHospitalId), along with patient details, diagnosis, and reason for transfer.',
   })
   @ApiResponse({ status: 201, description: 'Referral created successfully.' })
   @Roles(Role.CLINICIAN, Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
@@ -34,18 +34,30 @@ export class ReferralsController {
 
   @ApiOperation({
     summary: 'List referrals',
-    description: 'Returns all referrals. Optionally filter by hospital ID to see only referrals sent or received by a specific facility. Includes patient, hospital, and counter-referral details.',
+    description: 'Returns all referrals. Filter by hospital, status, date range, patient name or national ID.',
   })
-  @ApiQuery({ name: 'hospitalId', required: false, description: 'Filter referrals by sending or receiving hospital' })
+  @ApiQuery({ name: 'hospitalId', required: false, description: 'Filter by sending or receiving hospital' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by patient first or last name' })
+  @ApiQuery({ name: 'nationalId', required: false, description: 'Search by patient national ID' })
+  @ApiQuery({ name: 'status', required: false, description: 'Filter by referral status' })
+  @ApiQuery({ name: 'startDate', required: false, description: 'Filter from this date (ISO string)' })
+  @ApiQuery({ name: 'endDate', required: false, description: 'Filter up to this date (ISO string)' })
   @ApiResponse({ status: 200, description: 'List of referrals returned.' })
   @Get()
-  findAll(@Query('hospitalId') hospitalId?: string) {
-    return this.referralsService.findAll(hospitalId);
+  findAll(
+    @Query('hospitalId') hospitalId?: string,
+    @Query('search') search?: string,
+    @Query('nationalId') nationalId?: string,
+    @Query('status') status?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+  ) {
+    return this.referralsService.findAll({ hospitalId, search, nationalId, status, startDate, endDate });
   }
 
   @ApiOperation({
     summary: 'Update referral status',
-    description: 'Transitions a referral to a new status: ACCEPTED, REJECTED, IN_TRANSIT, or ADMITTED. Each transition is logged in the audit trail.',
+    description: 'Transitions a referral to a new status: ADMITTED. Each transition is logged in the audit trail.',
   })
   @ApiParam({ name: 'id', description: 'Referral UUID' })
   @ApiResponse({ status: 200, description: 'Referral status updated.' })

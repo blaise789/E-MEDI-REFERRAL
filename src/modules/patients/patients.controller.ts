@@ -1,8 +1,9 @@
-import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
+import { UpdatePatientDto } from './dto/update-patient.dto';
 import { AuthGuard } from '../../guards/auth.guard';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
 import { RolesGuard } from '../../guards/roles.guard';
 import { Roles } from '../../decorators/roles.decorator';
 import { Role } from '@prisma/client';
@@ -16,7 +17,7 @@ export class PatientsController {
 
   @ApiOperation({
     summary: 'Register a new patient',
-    description: 'Creates a new patient record with national ID, name, date of birth, gender, and contact number.',
+    description: 'Creates a new patient record. National ID is required and must be unique.',
   })
   @ApiResponse({ status: 201, description: 'Patient registered successfully.' })
   @ApiResponse({ status: 409, description: 'Patient with this national ID already exists.' })
@@ -26,17 +27,22 @@ export class PatientsController {
     return this.patientsService.create(dto);
   }
 
-  @ApiOperation({ summary: 'List all patients' })
+  @ApiOperation({ summary: 'List patients', description: 'Returns active patients. Optionally filter by name/nationalId (search) or hospitalId.' })
+  @ApiQuery({ name: 'search', required: false, description: 'Search by first name, last name, or national ID' })
+  @ApiQuery({ name: 'hospitalId', required: false, description: 'Filter by hospital' })
   @ApiResponse({ status: 200, description: 'List of patients returned.' })
   @Roles(Role.CLINICIAN, Role.FOCAL_PERSON, Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
   @Get()
-  findAll() {
-    return this.patientsService.findAll();
+  findAll(
+    @Query('search') search?: string,
+    @Query('hospitalId') hospitalId?: string,
+  ) {
+    return this.patientsService.findAll(search, hospitalId);
   }
 
   @ApiOperation({
     summary: 'Get a patient by ID',
-    description: 'Returns patient details along with their referral history.',
+    description: 'Returns patient details along with their full referral history.',
   })
   @ApiParam({ name: 'id', description: 'Patient UUID' })
   @ApiResponse({ status: 200, description: 'Patient returned.' })
@@ -45,5 +51,24 @@ export class PatientsController {
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.patientsService.findOne(id);
+  }
+
+  @ApiOperation({ summary: 'Update patient details' })
+  @ApiParam({ name: 'id', description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'Patient updated.' })
+  @ApiResponse({ status: 404, description: 'Patient not found.' })
+  @Roles(Role.CLINICIAN, Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() dto: UpdatePatientDto) {
+    return this.patientsService.update(id, dto);
+  }
+
+  @ApiOperation({ summary: 'Deactivate a patient', description: 'Soft-deletes a patient by setting isActive to false.' })
+  @ApiParam({ name: 'id', description: 'Patient UUID' })
+  @ApiResponse({ status: 200, description: 'Patient deactivated.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
+  @Patch(':id/deactivate')
+  deactivate(@Param('id') id: string) {
+    return this.patientsService.deactivate(id);
   }
 }

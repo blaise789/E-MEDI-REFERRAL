@@ -1,17 +1,19 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, IsOptional, IsDateString } from 'class-validator';
+import { IsString, IsNotEmpty, IsDateString, IsOptional, IsEmail } from 'class-validator';
 
 export class CreatePatientDto {
-  @ApiProperty({ required: false, example: '1199880012345678' })
-  @IsOptional()
+  @ApiProperty({ example: '1199880012345678' })
+  @IsNotEmpty({ message: 'National ID is required' })
   @IsString()
-  nationalId?: string;
+  nationalId: string;
 
   @ApiProperty({ example: 'Jean' })
+  @IsNotEmpty()
   @IsString()
   firstName: string;
 
   @ApiProperty({ example: 'Mugabo' })
+  @IsNotEmpty()
   @IsString()
   lastName: string;
 
@@ -20,6 +22,7 @@ export class CreatePatientDto {
   dateOfBirth: string;
 
   @ApiProperty({ example: 'Male' })
+  @IsNotEmpty()
   @IsString()
   gender: string;
 
@@ -32,4 +35,14 @@ export class CreatePatientDto {
   @IsOptional()
   @IsString()
   contactNumber?: string;
+
+  @ApiProperty({ required: false, example: 'patient@email.com' })
+  @IsOptional()
+  @IsEmail()
+  email?: string;
+
+  @ApiProperty({ required: false, description: 'Hospital that registered this patient' })
+  @IsOptional()
+  @IsString()
+  hospitalId?: string;
 }
