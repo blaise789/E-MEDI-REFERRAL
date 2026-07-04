@@ -84,6 +84,7 @@ model Hospital {
   // Referrals
   referralsSent     Referral[] @relation("ReferringHospital")
   referralsReceived Referral[] @relation("ReceivingHospital")
+  auditLogs         AuditLog[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -240,6 +241,9 @@ model AuditLog {
 
   referralId String?   @map("referral_id")
   referral   Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
+
+  hospitalId String?   @map("hospital_id")
+  hospital   Hospital? @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
 

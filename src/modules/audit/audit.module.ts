@@ -8,5 +8,6 @@ import { CaslModule } from '../casl/casl.module';
   imports: [PrismaModule, CaslModule],
   controllers: [AuditController],
   providers: [AuditService],
+  exports: [AuditService],
 })
 export class AuditModule {}

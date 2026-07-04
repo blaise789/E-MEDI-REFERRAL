@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Body, Param, UseGuards, Query, Req } from '@nestjs/common';
 import { PatientsService } from './patients.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
@@ -23,8 +23,8 @@ export class PatientsController {
   @ApiResponse({ status: 409, description: 'Patient with this national ID already exists.' })
   @Roles(Role.CLINICIAN, Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Post()
-  create(@Body() dto: CreatePatientDto) {
-    return this.patientsService.create(dto);
+  create(@Body() dto: CreatePatientDto, @Req() req: any) {
+    return this.patientsService.create(dto, req.user);
   }
 
   @ApiOperation({ summary: 'List patients', description: 'Returns active patients. Optionally filter by name/nationalId (search) or hospitalId.' })
@@ -59,8 +59,8 @@ export class PatientsController {
   @ApiResponse({ status: 404, description: 'Patient not found.' })
   @Roles(Role.CLINICIAN, Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
   @Patch(':id')
-  update(@Param('id') id: string, @Body() dto: UpdatePatientDto) {
-    return this.patientsService.update(id, dto);
+  update(@Param('id') id: string, @Body() dto: UpdatePatientDto, @Req() req: any) {
+    return this.patientsService.update(id, dto, req.user);
   }
 
   @ApiOperation({ summary: 'Deactivate a patient', description: 'Soft-deletes a patient by setting isActive to false.' })

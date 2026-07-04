@@ -84,6 +84,7 @@ export class ReferralsService {
         entityId: referral.id,
         referralId: referral.id,
         performedById: user.id,
+        hospitalId: user.hospitalId,
         details: `Referral submitted from ${referral.referringHospital.name} to ${referral.receivingHospital.name}`,
       },
     });
@@ -306,6 +307,7 @@ export class ReferralsService {
         entityId: referral.id,
         referralId: referral.id,
         performedById: user.id,
+        hospitalId: user.hospitalId,
       },
     });
 
@@ -386,6 +388,7 @@ export class ReferralsService {
         entityId: counterReferral.id,
         referralId: id,
         performedById: user.id,
+        hospitalId: user.hospitalId,
       },
     });
 

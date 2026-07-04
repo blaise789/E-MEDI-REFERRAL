@@ -134,7 +134,15 @@ export class ReportsService {
   async getAuditLogs(hospitalId?: string, startDate?: string, endDate?: string) {
     return this.prisma.auditLog.findMany({
       where: {
-        ...(hospitalId ? { referral: { OR: [{ referringHospitalId: hospitalId }, { receivingHospitalId: hospitalId }] } } : {}),
+        ...(hospitalId 
+          ? { 
+              OR: [
+                { hospitalId: hospitalId }, 
+                { referral: { OR: [{ referringHospitalId: hospitalId }, { receivingHospitalId: hospitalId }] } }
+              ] 
+            } 
+          : { hospitalId: null } // System logs have no hospital
+        ),
         ...(startDate || endDate ? {
           createdAt: {
             ...(startDate ? { gte: new Date(startDate) } : {}),

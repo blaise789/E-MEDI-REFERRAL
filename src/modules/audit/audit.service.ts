@@ -11,4 +11,17 @@ export class AuditService {
       take: 100, // Limit to 100 recent logs
     });
   }
+  async logAction(params: {
+    action: string;
+    entity?: string;
+    entityId?: string;
+    details?: string;
+    performedById?: string;
+    hospitalId?: string | null;
+    referralId?: string;
+  }) {
+    return this.prisma.auditLog.create({
+      data: params,
+    });
+  }
 }

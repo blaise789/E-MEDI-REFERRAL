@@ -32,8 +32,8 @@ export class HospitalsController {
   @ApiResponse({ status: 409, description: 'Hospital with this name already exists.' })
   @Roles(Role.SYS_ADMIN)
   @Post()
-  create(@Body() createHospitalDto: CreateHospitalDto) {
-    return this.hospitalsService.create(createHospitalDto);
+  create(@Body() createHospitalDto: CreateHospitalDto, @Req() req: any) {
+    return this.hospitalsService.create(createHospitalDto, req.user);
   }
 
   @ApiOperation({

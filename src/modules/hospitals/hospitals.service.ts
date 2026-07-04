@@ -7,6 +7,7 @@ import { SpecialistStatus } from '@prisma/client';
 import { CaslAbilityFactory, Action } from '../casl/casl-ability.factory';
 import { subject } from '@casl/ability';
 import { ClinicalGateway } from './clinical.gateway';
+import { AuditService } from '../audit/audit.service';
 
 @Injectable()
 export class HospitalsService {
@@ -14,19 +15,31 @@ export class HospitalsService {
     private readonly prisma: PrismaService,
     private readonly caslAbilityFactory: CaslAbilityFactory,
     private readonly clinicalGateway: ClinicalGateway,
+    private readonly audit: AuditService,
   ) {}
 
   /**
    * Register a new hospital (District or National Referral).
    */
-  async create(createHospitalDto: CreateHospitalDto) {
+  async create(createHospitalDto: CreateHospitalDto, user: any) {
     const existing = await this.prisma.hospital.findUnique({
       where: { name: createHospitalDto.name },
     });
     if (existing) {
       throw new HttpException('Hospital with this name already exists', HttpStatus.CONFLICT);
     }
-    return this.prisma.hospital.create({ data: createHospitalDto });
+    const hospital = await this.prisma.hospital.create({ data: createHospitalDto });
+
+    await this.audit.logAction({
+      action: 'REGISTERED_HOSPITAL',
+      entity: 'Hospital',
+      entityId: hospital.id,
+      details: `Registered new hospital facility: ${hospital.name} (${hospital.level})`,
+      performedById: user.id,
+      hospitalId: null, // Purely system-level!
+    });
+
+    return hospital;
   }
 
   /**
