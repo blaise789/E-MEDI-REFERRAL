@@ -39,11 +39,12 @@ export class PatientsService {
     return patient;
   }
 
-  async findAll(search?: string, hospitalId?: string) {
+  async findAll(user: any, search?: string, hospitalId?: string) {
+    const targetHospitalId = user?.role === 'SYS_ADMIN' ? hospitalId : user?.hospitalId;
     return this.prisma.patient.findMany({
       where: {
         isActive: true,
-        ...(hospitalId ? { hospitalId } : {}),
+        ...(targetHospitalId ? { hospitalId: targetHospitalId } : {}),
         ...(search
           ? {
               OR: [
@@ -58,7 +59,7 @@ export class PatientsService {
     });
   }
 
-  async findOne(id: string) {
+  async findOne(user: any, id: string) {
     const patient = await this.prisma.patient.findUnique({
       where: { id },
       include: {
@@ -74,6 +75,20 @@ export class PatientsService {
     if (!patient) {
       throw new HttpException('Patient not found', HttpStatus.NOT_FOUND);
     }
+
+    // Enforce multitenant isolation:
+    // If not SYS_ADMIN, the patient must either:
+    // 1. Belong to the user's hospital (patient.hospitalId === user.hospitalId)
+    // 2. Or, there must be an active/past referral where the patient is being sent to or from the user's hospital.
+    if (user?.role !== 'SYS_ADMIN' && patient.hospitalId !== user?.hospitalId) {
+      const hasReferralAccess = patient.referrals.some(
+        (ref) => ref.referringHospitalId === user?.hospitalId || ref.receivingHospitalId === user?.hospitalId
+      );
+      if (!hasReferralAccess) {
+        throw new HttpException('Access denied: You do not have permission to access this patient record.', HttpStatus.FORBIDDEN);
+      }
+    }
+
     return patient;
   }
 

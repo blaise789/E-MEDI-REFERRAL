@@ -2,6 +2,7 @@ import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, Query, Res }
 import { ReferralsService } from './referrals.service';
 import { CreateReferralDto } from './dto/create-referral.dto';
 import { CreateCounterReferralDto } from './dto/create-counter-referral.dto';
+import { DischargeReferralDto } from './dto/discharge-referral.dto';
 import { AuthGuard } from '../../guards/auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { ReferralStatus } from '@prisma/client';
@@ -76,6 +77,18 @@ export class ReferralsController {
   @Post(':id/counter')
   addCounterReferral(@Param('id') id: string, @Body() dto: CreateCounterReferralDto, @Req() req) {
     return this.referralsService.addCounterReferral(id, dto, req.user);
+  }
+
+  @ApiOperation({
+    summary: 'Discharge a patient',
+    description: 'Marks an ADMITTED referral as DISCHARGED. Optionally creates a counter-referral with follow-up instructions and an evidence file URL.',
+  })
+  @ApiParam({ name: 'id', description: 'Referral UUID' })
+  @ApiResponse({ status: 200, description: 'Patient discharged successfully.' })
+  @CheckPolicies((ability) => ability.can(Action.Update, 'Referral'))
+  @Post(':id/discharge')
+  discharge(@Param('id') id: string, @Body() dto: DischargeReferralDto, @Req() req) {
+    return this.referralsService.discharge(id, dto, req.user);
   }
 
   @ApiOperation({

@@ -40,7 +40,41 @@ export class ReferralsService {
       }
     }
 
-    // ── Enforce target ward has free beds ──────────────────
+    // ── EMERGENCY COMPATIBILITY ALGORITHM ──────────────────────────────────
+    // For emergency referrals, perform strict upfront checks before saving.
+    const isEmergency = createReferralDto.urgency === 'EMERGENCY' || !!createReferralDto.isEmergency;
+    if (isEmergency) {
+      // 1. Check if the receiving hospital has at least one AVAILABLE specialist
+      const availableSpecialist = await this.prisma.specialist.findFirst({
+        where: {
+          hospitalId: createReferralDto.receivingHospitalId,
+          status: 'AVAILABLE',
+        },
+      });
+      if (!availableSpecialist) {
+        throw new BadRequestException(
+          'Emergency Transfer Blocked: The receiving hospital currently has no available specialists. Please select a different facility.',
+        );
+      }
+
+      // 2. Check if there are beds available (any ward)
+      const availableWard = await this.prisma.bedCapacity.findFirst({
+        where: {
+          hospitalId: createReferralDto.receivingHospitalId,
+          ...(createReferralDto.targetWardType
+            ? { wardType: createReferralDto.targetWardType as any }
+            : {}),
+        },
+      });
+      if (!availableWard || availableWard.occupiedBeds >= availableWard.totalBeds) {
+        const wardName = createReferralDto.targetWardType ?? 'requested';
+        throw new BadRequestException(
+          `Emergency Transfer Blocked: The ${wardName} ward at the receiving hospital is at full capacity. Please select a different hospital or ward.`,
+        );
+      }
+    }
+
+    // ── Enforce target ward has free beds (non-emergency pre-check) ─────────
     if (createReferralDto.targetWardType) {
       const ward = await this.prisma.bedCapacity.findUnique({
         where: {
@@ -57,11 +91,18 @@ export class ReferralsService {
       }
     }
 
+    const urgency = createReferralDto.urgency || (createReferralDto.isEmergency ? 'EMERGENCY' : 'ROUTINE');
+
+    const { expectedAdmissionDate, ...restDto } = createReferralDto;
+
     const referral = await this.prisma.referral.create({
       data: {
-        ...createReferralDto,
+        ...restDto,
+        isEmergency,
+        urgency: urgency as any,
         targetWardType: createReferralDto.targetWardType as any,
         initiatedById: user.id,
+        expectedAdmissionDate: expectedAdmissionDate ? new Date(expectedAdmissionDate) : null,
       },
       include: {
         referringHospital: true,
@@ -93,6 +134,7 @@ export class ReferralsService {
     await this.notificationsService.notifyHospitalStaff(
       createReferralDto.receivingHospitalId,
       `New referral received from ${referral.referringHospital.name} for patient ${referral.patient.firstName} ${referral.patient.lastName}.`,
+      referral.id,
     );
 
     // Send patient email if they have one
@@ -314,6 +356,7 @@ export class ReferralsService {
     await this.notificationsService.notifyHospitalStaff(
       referral.referringHospitalId,
       `Referral for patient ${referral.patient.firstName} ${referral.patient.lastName} has been ${status} by ${referral.receivingHospital.name}.`,
+      referral.id,
     );
 
     return referral;
@@ -395,10 +438,83 @@ export class ReferralsService {
     await this.notificationsService.notifyHospitalStaff(
       referral.referringHospitalId,
       `Counter-referral received from ${referral.receivingHospital.name} for patient ${referral.patient.firstName} ${referral.patient.lastName}. Please review discharge notes and follow-up instructions.`,
+      id,
     );
 
     return counterReferral;
   }
+
+  /**
+   * Unified Discharge: marks referral as DISCHARGED and optionally creates
+   * a counter-referral with follow-up instructions + evidence URL.
+   */
+  async discharge(id: string, dto: any, user: any) {
+    const referral = await this.prisma.referral.findUnique({
+      where: { id },
+      include: { referringHospital: true, receivingHospital: true, patient: true },
+    });
+    if (!referral) throw new BadRequestException('Referral not found');
+    if (referral.status !== 'ADMITTED') {
+      throw new BadRequestException('Only ADMITTED referrals can be discharged.');
+    }
+
+    // Free up the bed
+    if (referral.targetWardType) {
+      await this.prisma.bedCapacity.update({
+        where: { hospitalId_wardType: { hospitalId: referral.receivingHospitalId, wardType: referral.targetWardType } },
+        data: { occupiedBeds: { decrement: 1 } },
+      });
+    }
+
+    // Free up the specialist
+    if (referral.targetSpecialistId) {
+      await this.prisma.specialist.update({
+        where: { id: referral.targetSpecialistId },
+        data: { status: 'AVAILABLE' },
+      });
+    }
+
+    const newStatus = dto.counterRefer ? 'COUNTER_REFERRED' : 'DISCHARGED';
+
+    // Create counter-referral record if requested
+    if (dto.counterRefer) {
+      await this.prisma.counterReferral.create({
+        data: {
+          referralId: id,
+          dischargeNotes: dto.dischargeNotes,
+          followUpInstructions: dto.followUpInstructions,
+          evidenceUrl: dto.evidenceUrl,
+        },
+      });
+    }
+
+    const updated = await this.prisma.referral.update({
+      where: { id },
+      data: { status: newStatus as any },
+      include: { referringHospital: true, receivingHospital: true, patient: true },
+    });
+
+    await this.prisma.auditLog.create({
+      data: {
+        action: `PATIENT_DISCHARGED`,
+        entity: 'Referral',
+        entityId: id,
+        referralId: id,
+        performedById: user.id,
+        hospitalId: user.hospitalId,
+        details: `Patient discharged. Status set to ${newStatus}`,
+      },
+    });
+
+    await this.notificationsService.notifyHospitalStaff(
+      referral.referringHospitalId,
+      `Patient ${referral.patient.firstName} ${referral.patient.lastName} has been discharged from ${referral.receivingHospital.name}.${dto.counterRefer ? ' A counter-referral has been submitted.' : ''}`,
+      id,
+    );
+
+    return updated;
+  }
+
 
   async generatePdf(id: string, res: Response) {
     const referral = await this.findOne(id);
@@ -428,13 +544,32 @@ export class ReferralsService {
     doc.text(`National ID: ${referral.patient.nationalId || "N/A"}`);
     doc.text(`Gender: ${referral.patient.gender}`);
     doc.text(`DOB: ${format(new Date(referral.patient.dateOfBirth), "PPP")}`);
+    doc.text(`Address: ${[referral.patient.cell ? `Cell: ${referral.patient.cell}` : '', referral.patient.sector ? `Sector: ${referral.patient.sector}` : '', referral.patient.district ? `District: ${referral.patient.district}` : ''].filter(Boolean).join(', ') || 'N/A'}`);
     doc.moveDown();
 
     doc.fillColor("#1e40af").fontSize(12).text("CLINICAL SUMMARY");
     doc.fillColor("#000000").fontSize(10);
     doc.text(`Primary Diagnosis: ${referral.diagnosis}`);
+    if (referral.significantFindings) {
+      doc.text(`Significant Findings: ${referral.significantFindings}`);
+    }
+    if (referral.proceduresReceived) {
+      doc.text(`Procedures & Treatments Received: ${referral.proceduresReceived}`);
+    }
+    if (referral.currentMedications) {
+      doc.text(`Current Medications: ${referral.currentMedications}`);
+    }
+    if (referral.patientCondition) {
+      doc.text(`Immediate Condition: ${referral.patientCondition}`);
+    }
     doc.text(`Reason for Transfer: ${referral.reasonForTransfer}`);
+    if (referral.preTransferTreatment) {
+      doc.text(`Pre-Transfer Treatment: ${referral.preTransferTreatment}`);
+    }
     doc.text(`Transport: ${referral.transportType || "AMBULANCE"}`);
+    if (referral.monitoringRequired) {
+      doc.text(`Transport Monitoring: ${referral.monitoringRequired}`);
+    }
     doc.moveDown();
 
     doc.fillColor("#1e40af").fontSize(12).text("TRANSFER CHAIN");

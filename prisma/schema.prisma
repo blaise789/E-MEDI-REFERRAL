@@ -43,12 +43,17 @@ enum SpecialistStatus {
   UNAVAILABLE
 }
 
-
 enum ReferralStatus {
   SUBMITTED
   ADMITTED
   DISCHARGED
   COUNTER_REFERRED
+}
+
+enum ReferralUrgency {
+  ROUTINE
+  URGENT
+  EMERGENCY
 }
 
 // ==========================================
@@ -160,6 +165,11 @@ model Patient {
   email         String?
   isActive      Boolean  @default(true) @map("is_active")
 
+  // Address
+  cell     String?
+  sector   String?
+  district String?
+
   hospitalId String?   @map("hospital_id")
   hospital   Hospital? @relation(fields: [hospitalId], references: [id], onDelete: SetNull)
 
@@ -185,19 +195,31 @@ model Referral {
   initiatedById String @map("initiated_by_id")
   initiatedBy   User   @relation("InitiatingUser", fields: [initiatedById], references: [id])
 
-  status  ReferralStatus  @default(SUBMITTED)
+  status ReferralStatus @default(SUBMITTED)
 
   reasonForTransfer    String      @map("reason_for_transfer")
   targetWardType       WardType?   @map("target_ward_type")
   targetSpecialistId   String?     @map("target_specialist_id")
   targetSpecialist     Specialist? @relation(fields: [targetSpecialistId], references: [id])
   diagnosis            String
+  significantFindings  String?     @map("significant_findings")
+  proceduresReceived   String?     @map("procedures_received")
+  currentMedications   String?     @map("current_medications")
+  patientCondition     String?     @map("patient_condition")
+  monitoringRequired   String?     @map("monitoring_required")
   preTransferTreatment String?     @map("pre_transfer_treatment")
   transportType        String?     @map("transport_type")
+  isEmergency          Boolean     @default(false) @map("is_emergency")
+  urgency              ReferralUrgency @default(ROUTINE)
+  referringDoctorName  String?     @map("referring_doctor_name")
+  referringDoctorContact String?    @map("referring_doctor_contact")
+  rejectionReason      String?     @map("rejection_reason")
+  expectedAdmissionDate DateTime?  @map("expected_admission_date")
 
   counterReferral CounterReferral?
 
-  logs AuditLog[]
+  logs          AuditLog[]
+  notifications Notification[]
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -210,8 +232,9 @@ model CounterReferral {
   referralId String   @unique @map("referral_id")
   referral   Referral @relation(fields: [referralId], references: [id], onDelete: Cascade)
 
-  dischargeNotes       String @map("discharge_notes")
-  followUpInstructions String @map("follow_up_instructions")
+  dischargeNotes       String? @map("discharge_notes")
+  followUpInstructions String? @map("follow_up_instructions")
+  evidenceUrl          String? @map("evidence_url")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -224,6 +247,9 @@ model Notification {
   message     String
   isRead      Boolean @default(false) @map("is_read")
   recipientId String  @map("recipient_id")
+
+  referralId String?   @map("referral_id")
+  referral   Referral? @relation(fields: [referralId], references: [id], onDelete: SetNull)
 
   createdAt DateTime @default(now()) @map("created_at")
 

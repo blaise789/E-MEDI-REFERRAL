@@ -36,4 +36,19 @@ export class UpdatePatientDto {
   @IsOptional()
   @IsEmail()
   email?: string;
+
+  @ApiProperty({ required: false, example: 'Kigarama' })
+  @IsOptional()
+  @IsString()
+  cell?: string;
+
+  @ApiProperty({ required: false, example: 'Kagarama' })
+  @IsOptional()
+  @IsString()
+  sector?: string;
+
+  @ApiProperty({ required: false, example: 'Kicukiro' })
+  @IsOptional()
+  @IsString()
+  district?: string;
 }

@@ -34,10 +34,11 @@ export class PatientsController {
   @Roles(Role.CLINICIAN, Role.FOCAL_PERSON, Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
   @Get()
   findAll(
+    @Req() req: any,
     @Query('search') search?: string,
     @Query('hospitalId') hospitalId?: string,
   ) {
-    return this.patientsService.findAll(search, hospitalId);
+    return this.patientsService.findAll(req.user, search, hospitalId);
   }
 
   @ApiOperation({
@@ -49,8 +50,8 @@ export class PatientsController {
   @ApiResponse({ status: 404, description: 'Patient not found.' })
   @Roles(Role.CLINICIAN, Role.FOCAL_PERSON, Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.patientsService.findOne(id);
+  findOne(@Req() req: any, @Param('id') id: string) {
+    return this.patientsService.findOne(req.user, id);
   }
 
   @ApiOperation({ summary: 'Update patient details' })
