@@ -21,53 +21,25 @@ export class ReferralsService {
   ) {}
 
   async create(createReferralDto: CreateReferralDto, user: any) {
-    // ── Validate specialist belongs to receiving hospital ──────────────────
-    if (createReferralDto.targetSpecialistId) {
-      const specialist = await this.prisma.specialist.findUnique({
-        where: { id: createReferralDto.targetSpecialistId },
-      });
-      if (!specialist || specialist.hospitalId !== createReferralDto.receivingHospitalId) {
-        throw new BadRequestException(
-          "The selected specialist does not belong to the receiving hospital.",
-        );
-      }
-
-      // ── Enforce specialist is AVAILABLE ────────────────────
-      if (specialist.status !== "AVAILABLE") {
-        throw new BadRequestException(
-          `Referral rejected: specialist ${specialist.firstName} ${specialist.lastName} is currently UNAVAILABLE.`,
-        );
-      }
-    }
+    // ── Referral routing checks ────────────────────────────
+    // (Specialist assignments are no longer hardcoded per referral.
+    //  The recommender handles routing based on active shifts and ward capacity.)
 
     // ── EMERGENCY COMPATIBILITY ALGORITHM ──────────────────────────────────
     // For emergency referrals, perform strict upfront checks before saving.
     const isEmergency = createReferralDto.urgency === 'EMERGENCY' || !!createReferralDto.isEmergency;
     if (isEmergency) {
-      // 1. Check if the receiving hospital has at least one AVAILABLE specialist
-      const availableSpecialist = await this.prisma.specialist.findFirst({
+      // 1. Check if there are beds available in the target ward
+      const availableWard = await this.prisma.ward.findFirst({
         where: {
           hospitalId: createReferralDto.receivingHospitalId,
-          status: 'AVAILABLE',
-        },
-      });
-      if (!availableSpecialist) {
-        throw new BadRequestException(
-          'Emergency Transfer Blocked: The receiving hospital currently has no available specialists. Please select a different facility.',
-        );
-      }
-
-      // 2. Check if there are beds available (any ward)
-      const availableWard = await this.prisma.bedCapacity.findFirst({
-        where: {
-          hospitalId: createReferralDto.receivingHospitalId,
-          ...(createReferralDto.targetWardType
-            ? { wardType: createReferralDto.targetWardType as any }
+          ...(createReferralDto.targetWardName
+            ? { name: { equals: createReferralDto.targetWardName, mode: 'insensitive' } }
             : {}),
         },
       });
       if (!availableWard || availableWard.occupiedBeds >= availableWard.totalBeds) {
-        const wardName = createReferralDto.targetWardType ?? 'requested';
+        const wardName = createReferralDto.targetWardName ?? 'requested';
         throw new BadRequestException(
           `Emergency Transfer Blocked: The ${wardName} ward at the receiving hospital is at full capacity. Please select a different hospital or ward.`,
         );
@@ -75,23 +47,33 @@ export class ReferralsService {
     }
 
     // ── Enforce target ward has free beds (non-emergency pre-check) ─────────
-    if (createReferralDto.targetWardType) {
-      const ward = await this.prisma.bedCapacity.findUnique({
+    if (createReferralDto.targetWardName && !isEmergency) {
+      const ward = await this.prisma.ward.findFirst({
         where: {
-          hospitalId_wardType: {
-            hospitalId: createReferralDto.receivingHospitalId,
-            wardType: createReferralDto.targetWardType as any,
-          },
+          hospitalId: createReferralDto.receivingHospitalId,
+          name: { equals: createReferralDto.targetWardName, mode: 'insensitive' },
         },
       });
       if (ward && ward.occupiedBeds >= ward.totalBeds) {
         throw new BadRequestException(
-          `Referral rejected: the ${createReferralDto.targetWardType} ward at the receiving hospital is at full capacity.`,
+          `Referral rejected: the ${createReferralDto.targetWardName} ward at the receiving hospital is at full capacity.`,
         );
       }
     }
 
     const urgency = createReferralDto.urgency || (createReferralDto.isEmergency ? 'EMERGENCY' : 'ROUTINE');
+
+    // ── Resolve wardId from ward name for FK linkage ─────────────────────────
+    let resolvedWardId: string | null = null;
+    if (createReferralDto.targetWardName) {
+      const matchedWard = await this.prisma.ward.findFirst({
+        where: {
+          hospitalId: createReferralDto.receivingHospitalId,
+          name: { equals: createReferralDto.targetWardName, mode: 'insensitive' },
+        },
+      });
+      resolvedWardId = matchedWard?.id ?? null;
+    }
 
     const { expectedAdmissionDate, ...restDto } = createReferralDto;
 
@@ -100,7 +82,8 @@ export class ReferralsService {
         ...restDto,
         isEmergency,
         urgency: urgency as any,
-        targetWardType: createReferralDto.targetWardType as any,
+        targetWardName: createReferralDto.targetWardName,
+        wardId: resolvedWardId,
         initiatedById: user.id,
         expectedAdmissionDate: expectedAdmissionDate ? new Date(expectedAdmissionDate) : null,
       },
@@ -108,6 +91,8 @@ export class ReferralsService {
         referringHospital: true,
         receivingHospital: true,
         patient: true,
+        ward: true,
+        assignedSpecialist: true,
       },
     });
 
@@ -148,14 +133,85 @@ export class ReferralsService {
     return referral;
   }
 
+  async getRecommendations(targetWardName: string) {
+    if (!targetWardName) {
+      throw new BadRequestException('Target ward name is required for recommendations');
+    }
+
+    const dayNames = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'];
+    const currentDay = dayNames[new Date().getDay()];
+    const currentHour = format(new Date(), 'HH:mm');
+
+    // Find all hospitals that have a matching ward
+    const hospitals = await this.prisma.hospital.findMany({
+      where: {
+        wards: {
+          some: {
+            name: { equals: targetWardName, mode: 'insensitive' },
+          },
+        },
+      },
+      include: {
+        wards: {
+          where: {
+            name: { equals: targetWardName, mode: 'insensitive' },
+          },
+          include: {
+            specialists: true,
+          },
+        },
+      },
+    });
+
+    const recommendations = hospitals.map(hospital => {
+      const ward = hospital.wards[0]; // Since we filtered, there should be exactly 1 matching ward
+      const availableBeds = ward.totalBeds - ward.occupiedBeds;
+
+      // Count how many specialists assigned to this ward are currently on shift
+      let activeSpecialistsCount = 0;
+      for (const spec of ward.specialists) {
+        if (spec.status === 'UNAVAILABLE') continue; // Explicitly marked unavailable
+        if (spec.workingDays.length > 0 && !spec.workingDays.includes(currentDay)) continue;
+        
+        if (spec.shiftStartTime && spec.shiftEndTime) {
+          if (currentHour >= spec.shiftStartTime && currentHour <= spec.shiftEndTime) {
+            activeSpecialistsCount++;
+          }
+        } else {
+           // If no specific shift times are set but status is AVAILABLE, count them
+           if (spec.status === 'AVAILABLE') activeSpecialistsCount++;
+        }
+      }
+
+      // Score: 10 points per active specialist + 1 point per available bed
+      const score = (activeSpecialistsCount * 10) + Math.max(0, availableBeds);
+
+      return {
+        hospitalId: hospital.id,
+        hospitalName: hospital.name,
+        location: hospital.location,
+        level: hospital.level,
+        wardId: ward.id,
+        availableBeds,
+        activeSpecialistsCount,
+        score,
+      };
+    });
+
+    // Sort by score descending (only recommend if score > 0, meaning beds > 0 or staff > 0)
+    return recommendations.filter(r => r.score > 0).sort((a, b) => b.score - a.score);
+  }
+
   async findOne(id: string) {
     const referral = await this.prisma.referral.findUnique({
       where: { id },
       include: {
         patient: true,
+        ward: true,
+        assignedSpecialist: true,
         receivingHospital: {
           include: {
-            beds: true,
+            wards: true,
             specialists: true,
           },
         },
@@ -168,7 +224,6 @@ export class ReferralsService {
             role: true,
           },
         },
-        targetSpecialist: true,
         counterReferral: true,
         logs: {
           include: {
@@ -244,7 +299,6 @@ export class ReferralsService {
         receivingHospital: true,
         referringHospital: true,
         counterReferral: true,
-        targetSpecialist: true,
       },
       orderBy: { createdAt: "desc" },
     });
@@ -271,60 +325,37 @@ export class ReferralsService {
     }
 
     // ── Clinical Automation: Bed availability lock when ADMITTING ──────────
-    if (status === "ADMITTED" && existingReferral.targetWardType) {
-      const ward = await this.prisma.bedCapacity.findUnique({
-        where: {
-          hospitalId_wardType: {
-            hospitalId: existingReferral.receivingHospitalId,
-            wardType: existingReferral.targetWardType,
-          },
-        },
-      });
+    // Prefer wardId FK, fall back to name lookup for legacy referrals
+    const wardKey = existingReferral.wardId
+      ? { id: existingReferral.wardId }
+      : existingReferral.targetWardName
+        ? { hospitalId_name: { hospitalId: existingReferral.receivingHospitalId, name: existingReferral.targetWardName } }
+        : null;
+
+    if (status === "ADMITTED" && wardKey) {
+      const ward = await this.prisma.ward.findUnique({ where: wardKey as any });
       if (ward && ward.occupiedBeds >= ward.totalBeds) {
         throw new ForbiddenException(
-          `Admission cannot be confirmed: The target ward (${existingReferral.targetWardType}) is at 100% capacity.`,
+          `Admission cannot be confirmed: The target ward (${existingReferral.targetWardName ?? 'requested'}) is at 100% capacity.`,
         );
       }
     }
 
     // ── Automate Bed Count on Lifecycle Events ────────────────────────────
-    if (existingReferral.targetWardType) {
+    if (wardKey) {
       if (status === "ADMITTED") {
-        const ward = await this.prisma.bedCapacity.update({
-          where: {
-            hospitalId_wardType: {
-              hospitalId: existingReferral.receivingHospitalId,
-              wardType: existingReferral.targetWardType,
-            },
-          },
+        const ward = await this.prisma.ward.update({
+          where: wardKey as any,
           data: { occupiedBeds: { increment: 1 } },
         });
         this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
       } else if (status === "DISCHARGED" || status === "COUNTER_REFERRED") {
         if (existingReferral.status === "ADMITTED") {
-          const ward = await this.prisma.bedCapacity.update({
-            where: {
-              hospitalId_wardType: {
-                hospitalId: existingReferral.receivingHospitalId,
-                wardType: existingReferral.targetWardType,
-              },
-            },
+          const ward = await this.prisma.ward.update({
+            where: wardKey as any,
             data: { occupiedBeds: { decrement: 1 } },
           });
           this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
-        }
-      }
-    }
-
-    // ── Automate Specialist Status: only AVAILABLE/UNAVAILABLE ────────────
-    if (existingReferral.targetSpecialistId) {
-      if (status === "DISCHARGED" || status === "COUNTER_REFERRED") {
-        if (existingReferral.status === "ADMITTED") {
-          const spec = await this.prisma.specialist.update({
-            where: { id: existingReferral.targetSpecialistId },
-            data: { status: "AVAILABLE" },
-          });
-          this.clinicalGateway.broadcastSpecialistUpdate(existingReferral.receivingHospitalId, spec);
         }
       }
     }
@@ -336,6 +367,8 @@ export class ReferralsService {
         referringHospital: true,
         receivingHospital: true,
         patient: true,
+        ward: true,
+        assignedSpecialist: true,
       },
     });
 
@@ -385,26 +418,17 @@ export class ReferralsService {
     }
 
     // Restore bed capacity on discharge
-    if (existingReferral.targetWardType) {
-      const ward = await this.prisma.bedCapacity.update({
+    if (existingReferral.targetWardName) {
+      const ward = await this.prisma.ward.update({
         where: {
-          hospitalId_wardType: {
+          hospitalId_name: {
             hospitalId: existingReferral.receivingHospitalId,
-            wardType: existingReferral.targetWardType,
+            name: existingReferral.targetWardName,
           },
         },
         data: { occupiedBeds: { decrement: 1 } },
       });
       this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
-    }
-
-    // Free up specialist
-    if (existingReferral.targetSpecialistId) {
-      const spec = await this.prisma.specialist.update({
-        where: { id: existingReferral.targetSpecialistId },
-        data: { status: "AVAILABLE" },
-      });
-      this.clinicalGateway.broadcastSpecialistUpdate(existingReferral.receivingHospitalId, spec);
     }
 
     const counterReferral = await this.prisma.counterReferral.create({
@@ -459,18 +483,10 @@ export class ReferralsService {
     }
 
     // Free up the bed
-    if (referral.targetWardType) {
-      await this.prisma.bedCapacity.update({
-        where: { hospitalId_wardType: { hospitalId: referral.receivingHospitalId, wardType: referral.targetWardType } },
+    if (referral.targetWardName) {
+      await this.prisma.ward.update({
+        where: { hospitalId_name: { hospitalId: referral.receivingHospitalId, name: referral.targetWardName } },
         data: { occupiedBeds: { decrement: 1 } },
-      });
-    }
-
-    // Free up the specialist
-    if (referral.targetSpecialistId) {
-      await this.prisma.specialist.update({
-        where: { id: referral.targetSpecialistId },
-        data: { status: 'AVAILABLE' },
       });
     }
 
@@ -576,11 +592,8 @@ export class ReferralsService {
     doc.fillColor("#000000").fontSize(10);
     doc.text(`Referring Hospital: ${referral.referringHospital.name} (${referral.referringHospital.location})`);
     doc.text(`Receiving Hospital: ${referral.receivingHospital.name} (${referral.receivingHospital.location})`);
-    if ((referral as any).targetSpecialist) {
-      doc.text(`Specialist: Dr. ${(referral as any).targetSpecialist.firstName} ${(referral as any).targetSpecialist.lastName} — ${(referral as any).targetSpecialist.discipline}`);
-    }
-    if (referral.targetWardType) {
-      doc.text(`Ward: ${referral.targetWardType}`);
+    if (referral.targetWardName) {
+      doc.text(`Ward: ${referral.targetWardName}`);
     }
     doc.moveDown();
 

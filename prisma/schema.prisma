@@ -18,25 +18,6 @@ enum HospitalLevel {
   REFERRAL
 }
 
-enum WardType {
-  GENERAL_MEDICAL
-  SURGICAL
-  ICU
-  HDU
-  MATERNITY
-  PEDIATRIC
-}
-
-enum SpecialistDiscipline {
-  GENERAL_SURGERY
-  ORTHOPEDIC_SURGERY
-  OBSTETRICS_GYNECOLOGY
-  INTERNAL_MEDICINE
-  PEDIATRICS
-  NEUROLOGY
-  ANESTHESIA
-  INTENSIVE_CARE
-}
 
 enum SpecialistStatus {
   AVAILABLE
@@ -82,7 +63,7 @@ model Hospital {
   contactNumber String?       @map("contact_number")
 
   users       User[]
-  beds        BedCapacity[]
+  wards       Ward[]
   specialists Specialist[]
   patients    Patient[]
 
@@ -121,34 +102,44 @@ model User {
   @@map("users")
 }
 
-model BedCapacity {
+model Ward {
   id           String   @id @default(uuid())
-  wardType     WardType @map("ward_type")
+  name         String
   totalBeds    Int      @map("total_beds")
   occupiedBeds Int      @default(0) @map("occupied_beds")
 
   hospitalId String   @map("hospital_id")
   hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
 
+  specialists Specialist[]
+  referrals   Referral[]
+
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  @@unique([hospitalId, wardType])
-  @@map("bed_capacities")
+  @@unique([hospitalId, name])
+  @@map("wards")
 }
 
 model Specialist {
-  id         String               @id @default(uuid())
-  firstName  String               @map("first_name")
-  lastName   String               @map("last_name")
-  discipline SpecialistDiscipline
-  status     SpecialistStatus     @default(UNAVAILABLE)
+  id             String           @id @default(uuid())
+  firstName      String           @map("first_name")
+  lastName       String           @map("last_name")
+  discipline     String           @default("General Medicine")
+  
+  wardId         String           @map("ward_id")
+  ward           Ward             @relation(fields: [wardId], references: [id], onDelete: Cascade)
+  
+  status         SpecialistStatus @default(UNAVAILABLE)
+  shiftStartTime String?          @map("shift_start_time") // e.g., "08:00"
+  shiftEndTime   String?          @map("shift_end_time")   // e.g., "17:00"
+  workingDays    String[]         @map("working_days")     // e.g., ["MONDAY", "TUESDAY"]
 
   hospitalId String   @map("hospital_id")
   hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
 
-  referrals Referral[]
-
   updatedAt DateTime @updatedAt @map("updated_at")
+
+  referrals Referral[]
 
   @@map("specialists")
 }
@@ -198,9 +189,13 @@ model Referral {
   status ReferralStatus @default(SUBMITTED)
 
   reasonForTransfer    String      @map("reason_for_transfer")
-  targetWardType       WardType?   @map("target_ward_type")
-  targetSpecialistId   String?     @map("target_specialist_id")
-  targetSpecialist     Specialist? @relation(fields: [targetSpecialistId], references: [id])
+  targetWardName       String?     @map("target_ward_name")
+  wardId               String?     @map("ward_id")
+  ward                 Ward?       @relation(fields: [wardId], references: [id], onDelete: SetNull)
+  
+  assignedSpecialistId String?     @map("assigned_specialist_id")
+  assignedSpecialist   Specialist? @relation(fields: [assignedSpecialistId], references: [id], onDelete: SetNull)
+  
   diagnosis            String
   significantFindings  String?     @map("significant_findings")
   proceduresReceived   String?     @map("procedures_received")

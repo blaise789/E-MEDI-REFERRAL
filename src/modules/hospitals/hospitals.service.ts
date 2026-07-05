@@ -1,13 +1,19 @@
-import { HttpException, HttpStatus, Injectable, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../../prisma/prisma.service';
-import { CreateHospitalDto } from './dto/create-hospital.dto';
-import { AddBedCapacityDto } from './dto/add-bed-capacity.dto';
-import { AddSpecialistDto } from './dto/add-specialist.dto';
-import { SpecialistStatus } from '@prisma/client';
-import { CaslAbilityFactory, Action } from '../casl/casl-ability.factory';
-import { subject } from '@casl/ability';
-import { ClinicalGateway } from './clinical.gateway';
-import { AuditService } from '../audit/audit.service';
+import {
+  HttpException,
+  HttpStatus,
+  Injectable,
+  ForbiddenException,
+} from "@nestjs/common";
+import { PrismaService } from "../../../prisma/prisma.service";
+import { CreateHospitalDto } from "./dto/create-hospital.dto";
+import { CreateWardDto } from "./dto/create-ward.dto";
+import { AddSpecialistDto } from "./dto/add-specialist.dto";
+import { UpdateSpecialistDto } from "./dto/update-specialist.dto";
+import { SpecialistStatus } from "@prisma/client";
+import { CaslAbilityFactory, Action } from "../casl/casl-ability.factory";
+import { subject } from "@casl/ability";
+import { ClinicalGateway } from "./clinical.gateway";
+import { AuditService } from "../audit/audit.service";
 
 @Injectable()
 export class HospitalsService {
@@ -26,13 +32,18 @@ export class HospitalsService {
       where: { name: createHospitalDto.name },
     });
     if (existing) {
-      throw new HttpException('Hospital with this name already exists', HttpStatus.CONFLICT);
+      throw new HttpException(
+        "Hospital with this name already exists",
+        HttpStatus.CONFLICT,
+      );
     }
-    const hospital = await this.prisma.hospital.create({ data: createHospitalDto });
+    const hospital = await this.prisma.hospital.create({
+      data: createHospitalDto,
+    });
 
     await this.audit.logAction({
-      action: 'REGISTERED_HOSPITAL',
-      entity: 'Hospital',
+      action: "REGISTERED_HOSPITAL",
+      entity: "Hospital",
       entityId: hospital.id,
       details: `Registered new hospital facility: ${hospital.name} (${hospital.level})`,
       performedById: user.id,
@@ -48,7 +59,7 @@ export class HospitalsService {
   async findAll() {
     return this.prisma.hospital.findMany({
       include: {
-        beds: true,
+        wards: true,
         specialists: true,
         _count: {
           select: {
@@ -57,7 +68,7 @@ export class HospitalsService {
           },
         },
       },
-      orderBy: { name: 'asc' },
+      orderBy: { name: "asc" },
     });
   }
 
@@ -68,12 +79,12 @@ export class HospitalsService {
     const hospital = await this.prisma.hospital.findUnique({
       where: { id },
       include: {
-        beds: true,
+        wards: true,
         specialists: true,
       },
     });
     if (!hospital) {
-      throw new HttpException('Hospital not found', HttpStatus.NOT_FOUND);
+      throw new HttpException("Hospital not found", HttpStatus.NOT_FOUND);
     }
     return hospital;
   }
@@ -86,10 +97,10 @@ export class HospitalsService {
       where: { id: hospitalId },
     });
     if (!hospital) {
-      throw new HttpException('Hospital not found', HttpStatus.NOT_FOUND);
+      throw new HttpException("Hospital not found", HttpStatus.NOT_FOUND);
     }
 
-    const beds = await this.prisma.bedCapacity.findMany({
+    const wards = await this.prisma.ward.findMany({
       where: { hospitalId },
     });
     const specialists = await this.prisma.specialist.findMany({
@@ -97,44 +108,51 @@ export class HospitalsService {
     });
 
     // Compute summary
-    const totalBeds = beds.reduce((sum, b) => sum + b.totalBeds, 0);
-    const occupiedBeds = beds.reduce((sum, b) => sum + b.occupiedBeds, 0);
+    const totalBeds = wards.reduce((sum, b) => sum + b.totalBeds, 0);
+    const occupiedBeds = wards.reduce((sum, b) => sum + b.occupiedBeds, 0);
     const availableBeds = totalBeds - occupiedBeds;
 
     return {
       hospital: { id: hospital.id, name: hospital.name, level: hospital.level },
       bedSummary: { totalBeds, occupiedBeds, availableBeds },
-      beds,
+      wards,
       specialists,
     };
   }
 
   /**
-   * Add a ward/bed configuration to a hospital.
+   * Add a ward configuration to a hospital.
    */
-  async addBedCapacity(hospitalId: string, dto: AddBedCapacityDto, user: any) {
+  async addWard(hospitalId: string, dto: CreateWardDto, user: any) {
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, subject('BedCapacity', { hospitalId } as any))) {
-      throw new ForbiddenException('You are not authorized to manage beds for this hospital');
+    if (
+      !ability.can(Action.Manage, subject("Ward" as any, { hospitalId } as any))
+    ) {
+      throw new ForbiddenException(
+        "You are not authorized to manage wards for this hospital",
+      );
     }
 
-    const existing = await this.prisma.bedCapacity.findUnique({
+    const existing = await this.prisma.ward.findUnique({
       where: {
-        hospitalId_wardType: {
+        hospitalId_name: {
           hospitalId,
-          wardType: dto.wardType,
+          name: dto.name,
         },
       },
     });
 
     if (existing) {
-      throw new HttpException(`Ward type ${dto.wardType} already exists for this facility. Update the existing ward instead.`, HttpStatus.CONFLICT);
+      throw new HttpException(
+        `Ward ${dto.name} already exists for this facility. Update the existing ward instead.`,
+        HttpStatus.CONFLICT,
+      );
     }
 
-    return this.prisma.bedCapacity.create({
+    return this.prisma.ward.create({
       data: {
         hospitalId,
-        wardType: dto.wardType,
+        name: dto.name,
         totalBeds: dto.totalBeds,
       },
     });
@@ -143,17 +161,19 @@ export class HospitalsService {
   /**
    * Update the occupied bed count for a specific ward.
    */
-  async updateBedCapacity(bedId: string, occupiedBeds: number, user: any) {
-    const bed = await this.prisma.bedCapacity.findUnique({ where: { id: bedId } });
-    if (!bed) throw new HttpException('Bed config not found', HttpStatus.NOT_FOUND);
+  async updateWardOccupancy(wardId: string, occupiedBeds: number, user: any) {
+    const ward = await this.prisma.ward.findUnique({ where: { id: wardId } });
+    if (!ward) throw new HttpException("Ward not found", HttpStatus.NOT_FOUND);
 
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, subject('BedCapacity', bed as any))) {
-      throw new ForbiddenException('You are not authorized to update beds for this hospital');
+    if (!ability.can(Action.Manage, subject("Ward" as any, ward as any))) {
+      throw new ForbiddenException(
+        "You are not authorized to update wards for this hospital",
+      );
     }
 
-    const updated = await this.prisma.bedCapacity.update({
-      where: { id: bedId },
+    const updated = await this.prisma.ward.update({
+      where: { id: wardId },
       data: { occupiedBeds },
     });
 
@@ -164,17 +184,23 @@ export class HospitalsService {
   /**
    * Manually force a specific bed occupancy (Admin Override).
    */
-  async recalibrateBedCapacity(bedId: string, occupiedBeds: number, user: any) {
+  async recalibrateWardOccupancy(
+    wardId: string,
+    occupiedBeds: number,
+    user: any,
+  ) {
     const ability = this.caslAbilityFactory.createForUser(user);
-    const bed = await this.prisma.bedCapacity.findUnique({ where: { id: bedId } });
-    if (!bed) throw new HttpException('Bed config not found', HttpStatus.NOT_FOUND);
+    const ward = await this.prisma.ward.findUnique({ where: { id: wardId } });
+    if (!ward) throw new HttpException("Ward not found", HttpStatus.NOT_FOUND);
 
-    if (!ability.can(Action.Manage, subject('BedCapacity', bed as any))) {
-      throw new ForbiddenException('You are not authorized to recalibrate beds for this hospital');
+    if (!ability.can(Action.Manage, subject("Ward" as any, ward as any))) {
+      throw new ForbiddenException(
+        "You are not authorized to recalibrate wards for this hospital",
+      );
     }
 
-    const updated = await this.prisma.bedCapacity.update({
-      where: { id: bedId },
+    const updated = await this.prisma.ward.update({
+      where: { id: wardId },
       data: { occupiedBeds },
     });
 
@@ -187,8 +213,27 @@ export class HospitalsService {
    */
   async addSpecialist(hospitalId: string, dto: AddSpecialistDto, user: any) {
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, subject('Specialist', { hospitalId } as any))) {
-      throw new ForbiddenException('You are not authorized to add specialists for this hospital');
+    if (
+      !ability.can(Action.Manage, subject("Specialist", { hospitalId } as any))
+    ) {
+      throw new ForbiddenException(
+        "You are not authorized to add specialists for this hospital",
+      );
+    }
+
+    const now = new Date();
+    const currentDay = now.toLocaleString('en-US', { weekday: 'long' }).toUpperCase(); // e.g., 'MONDAY'
+    const currentHour = now.toTimeString().substring(0, 5); // e.g., '14:30'
+
+    let initialStatus: 'AVAILABLE' | 'UNAVAILABLE' = 'UNAVAILABLE';
+    if (dto.workingDays && dto.workingDays.includes(currentDay)) {
+      if (dto.shiftStartTime && dto.shiftEndTime) {
+        if (currentHour >= dto.shiftStartTime && currentHour <= dto.shiftEndTime) {
+          initialStatus = 'AVAILABLE';
+        }
+      } else {
+        initialStatus = 'AVAILABLE';
+      }
     }
 
     return this.prisma.specialist.create({
@@ -196,21 +241,73 @@ export class HospitalsService {
         hospitalId,
         firstName: dto.firstName,
         lastName: dto.lastName,
+        wardId: dto.wardId,
         discipline: dto.discipline,
+        status: initialStatus,
+        shiftStartTime: dto.shiftStartTime,
+        shiftEndTime: dto.shiftEndTime,
+        workingDays: dto.workingDays,
       },
     });
   }
 
   /**
-   * Toggle a specialist's availability status.
+   * Update specialist details (name, discipline, schedule, ward assignment).
    */
-  async updateSpecialistStatus(specialistId: string, status: SpecialistStatus, user: any) {
-    const specialist = await this.prisma.specialist.findUnique({ where: { id: specialistId } });
-    if (!specialist) throw new HttpException('Specialist not found', HttpStatus.NOT_FOUND);
+  async updateSpecialist(
+    specialistId: string,
+    dto: UpdateSpecialistDto,
+    user: any,
+  ) {
+    const specialist = await this.prisma.specialist.findUnique({
+      where: { id: specialistId },
+    });
+    if (!specialist)
+      throw new HttpException("Specialist not found", HttpStatus.NOT_FOUND);
 
     const ability = this.caslAbilityFactory.createForUser(user);
-    if (!ability.can(Action.Manage, subject('Specialist', specialist as any))) {
-      throw new ForbiddenException('You are not authorized to update specialists for this hospital');
+    if (!ability.can(Action.Manage, subject("Specialist", specialist as any))) {
+      throw new ForbiddenException(
+        "You are not authorized to update specialists for this hospital",
+      );
+    }
+
+    const updated = await this.prisma.specialist.update({
+      where: { id: specialistId },
+      data: {
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        wardId: dto.wardId,
+        discipline: dto.discipline,
+        shiftStartTime: dto.shiftStartTime,
+        shiftEndTime: dto.shiftEndTime,
+        workingDays: dto.workingDays,
+      },
+    });
+
+    this.clinicalGateway.broadcastSpecialistUpdate(updated.hospitalId, updated);
+    return updated;
+  }
+
+  /**
+   * Toggle a specialist's availability status.
+   */
+  async updateSpecialistStatus(
+    specialistId: string,
+    status: SpecialistStatus,
+    user: any,
+  ) {
+    const specialist = await this.prisma.specialist.findUnique({
+      where: { id: specialistId },
+    });
+    if (!specialist)
+      throw new HttpException("Specialist not found", HttpStatus.NOT_FOUND);
+
+    const ability = this.caslAbilityFactory.createForUser(user);
+    if (!ability.can(Action.Manage, subject("Specialist", specialist as any))) {
+      throw new ForbiddenException(
+        "You are not authorized to update specialists for this hospital",
+      );
     }
 
     const updated = await this.prisma.specialist.update({

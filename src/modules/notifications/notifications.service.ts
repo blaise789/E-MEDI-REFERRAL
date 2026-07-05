@@ -118,79 +118,78 @@ export class NotificationsService {
       }
       doc.moveDown(1);
 
+      const addHeaderRow = (title: string) => {
+        if (doc.y > 700) doc.addPage();
+        const y = doc.y;
+        doc.rect(50, y, 495, 20).fillAndStroke('#f1f5f9', '#94a3b8');
+        doc.fillColor('#0f172a').font('Helvetica-Bold').fontSize(11).text(title, 55, y + 6);
+        doc.y = y + 20;
+      };
+
+      const addRow = (label: string, value: string) => {
+        if (doc.y > 700) doc.addPage();
+        const y = doc.y;
+        
+        doc.font('Helvetica').fontSize(10);
+        const textHeight = doc.heightOfString(value || 'N/A', { width: 310 });
+        const rowHeight = Math.max(22, textHeight + 10);
+        
+        // Draw the bordered boxes
+        doc.rect(50, y, 170, rowHeight).fillAndStroke('#f8fafc', '#94a3b8');
+        doc.rect(220, y, 325, rowHeight).fillAndStroke('#ffffff', '#94a3b8');
+        
+        // Text
+        doc.fillColor('#475569').font('Helvetica-Bold').text(label, 55, y + 6, { width: 160 });
+        doc.fillColor('#0f172a').font('Helvetica').text(value || 'N/A', 228, y + 6, { width: 310 });
+        
+        doc.y = y + rowHeight;
+      };
+
       // Patient
-      doc.fillColor('#1e40af').fontSize(12).font('Helvetica-Bold').text('PATIENT IDENTIFICATION');
-      doc.fillColor('#000000').fontSize(10).font('Helvetica');
-      doc.text(`Full Name:   ${patient.firstName} ${patient.lastName}`);
-      doc.text(`National ID: ${patient.nationalId}`);
-      doc.text(`Gender:      ${patient.gender}`);
-      doc.text(`DOB:         ${format(new Date(patient.dateOfBirth), 'PPP')}`);
-      doc.text(`Address:     ${[patient.cell ? `Cell: ${patient.cell}` : '', patient.sector ? `Sector: ${patient.sector}` : '', patient.district ? `District: ${patient.district}` : ''].filter(Boolean).join(', ') || 'N/A'}`);
-      doc.text(`Insurance:   ${patient.insurance || 'None / Out-of-pocket'}`);
+      addHeaderRow('PATIENT IDENTIFICATION');
+      addRow('Full Name', `${patient.firstName} ${patient.lastName}`);
+      addRow('National ID', patient.nationalId);
+      addRow('Gender', patient.gender);
+      addRow('DOB', patient.dateOfBirth ? format(new Date(patient.dateOfBirth), 'PPP') : 'N/A');
+      const addr = [patient.cell ? `Cell: ${patient.cell}` : '', patient.sector ? `Sector: ${patient.sector}` : '', patient.district ? `District: ${patient.district}` : ''].filter(Boolean).join(', ');
+      addRow('Address', addr);
+      addRow('Insurance', patient.insurance || 'None / Out-of-pocket');
       doc.moveDown();
 
       // Clinical
-      doc.fillColor('#1e40af').fontSize(12).text('CLINICAL SUMMARY');
-      doc.fillColor('#000000').fontSize(10);
-      doc.text(`Primary Diagnosis:     ${referral.diagnosis}`);
-      if (referral.significantFindings) {
-        doc.text(`Significant Findings:  ${referral.significantFindings}`);
-      }
-      if (referral.proceduresReceived) {
-        doc.text(`Procedures & Treatments Received: ${referral.proceduresReceived}`);
-      }
-      if (referral.currentMedications) {
-        doc.text(`Current Medications:   ${referral.currentMedications}`);
-      }
-      if (referral.patientCondition) {
-        doc.text(`Immediate Condition:   ${referral.patientCondition}`);
-      }
-      doc.text(`Reason for Transfer:   ${referral.reasonForTransfer}`);
-      if (referral.preTransferTreatment) {
-        doc.text(`Pre-Transfer Treatment: ${referral.preTransferTreatment}`);
-      }
-      doc.text(`Transport Type:        ${referral.transportType || 'AMBULANCE'}`);
-      if (referral.monitoringRequired) {
-        doc.text(`Transport Monitoring:  ${referral.monitoringRequired}`);
-      }
-      if (referral.targetWardType) {
-        doc.text(`Target Ward:           ${referral.targetWardType}`);
-      }
+      addHeaderRow('CLINICAL SUMMARY');
+      addRow('Primary Diagnosis', referral.diagnosis);
+      if (referral.significantFindings) addRow('Significant Findings', referral.significantFindings);
+      if (referral.proceduresReceived) addRow('Procedures & Treatments', referral.proceduresReceived);
+      if (referral.currentMedications) addRow('Current Medications', referral.currentMedications);
+      if (referral.patientCondition) addRow('Immediate Condition', referral.patientCondition);
+      addRow('Reason for Transfer', referral.reasonForTransfer);
+      if (referral.preTransferTreatment) addRow('Pre-Transfer Treatment', referral.preTransferTreatment);
+      addRow('Transport Type', referral.transportType || 'AMBULANCE');
+      if (referral.monitoringRequired) addRow('Transport Monitoring', referral.monitoringRequired);
+      if (referral.ward || referral.targetWardName) addRow('Target Ward', referral.ward?.name || referral.targetWardName);
       if (referral.expectedAdmissionDate) {
-        const formattedDate = new Date(referral.expectedAdmissionDate).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        });
-        doc.text(`Expected Admission:    ${formattedDate}`);
+        addRow('Expected Admission', new Date(referral.expectedAdmissionDate).toLocaleDateString());
       }
       doc.moveDown();
 
       // Transfer chain
-      doc.fillColor('#1e40af').fontSize(12).text('TRANSFER CHAIN');
-      doc.fillColor('#000000').fontSize(10);
-      doc.text(`Referring Hospital:  ${referral.referringHospital?.name}`);
-      doc.text(`Receiving Hospital:  ${referral.receivingHospital?.name}`);
+      addHeaderRow('TRANSFER CHAIN');
+      addRow('Referring Hospital', referral.referringHospital?.name);
+      addRow('Receiving Hospital', referral.receivingHospital?.name);
       if (referral.referringDoctorName) {
-        doc.text(`Referring Doctor:    ${referral.referringDoctorName}${referral.referringDoctorContact ? ` (${referral.referringDoctorContact})` : ''}`);
+        addRow('Referring Doctor', `${referral.referringDoctorName}${referral.referringDoctorContact ? ` (${referral.referringDoctorContact})` : ''}`);
       }
-      if (referral.targetSpecialist) {
-        doc.text(`Assigned Specialist: Dr. ${referral.targetSpecialist.firstName} ${referral.targetSpecialist.lastName} (${referral.targetSpecialist.discipline})`);
+      if (referral.assignedSpecialist) {
+        addRow('Assigned Specialist', `Dr. ${referral.assignedSpecialist.firstName} ${referral.assignedSpecialist.lastName} (${referral.assignedSpecialist.discipline})`);
       }
       doc.moveDown();
 
       // Counter-referral / discharge if present
       if (referral.counterReferral) {
-        doc.rect(50, doc.y, 495, 1).fill('#e2e8f0');
-        doc.moveDown(0.5);
-        doc.fillColor('#1e40af').fontSize(12).text('DISCHARGE & FOLLOW-UP NOTES');
-        doc.fillColor('#000000').fontSize(10);
-        if (referral.counterReferral.dischargeNotes) {
-          doc.text(`Discharge Notes: ${referral.counterReferral.dischargeNotes}`);
-        }
-        if (referral.counterReferral.followUpInstructions) {
-          doc.text(`Follow-up:       ${referral.counterReferral.followUpInstructions}`);
-        }
+        addHeaderRow('DISCHARGE & FOLLOW-UP NOTES');
+        if (referral.counterReferral.dischargeNotes) addRow('Discharge Notes', referral.counterReferral.dischargeNotes);
+        if (referral.counterReferral.followUpInstructions) addRow('Follow-up', referral.counterReferral.followUpInstructions);
         doc.moveDown();
       }
 

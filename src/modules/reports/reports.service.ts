@@ -24,18 +24,18 @@ export class ReportsService {
 
     // 1. Bed Occupancy Rate Data by Ward Type
     const bedOccupancies = hospitalId
-      ? await this.prisma.bedCapacity.findMany({ where: { hospitalId } })
-      : await this.prisma.bedCapacity.findMany();
+      ? await this.prisma.ward.findMany({ where: { hospitalId } })
+      : await this.prisma.ward.findMany();
 
     const totals: Record<string, { occupied: number; total: number }> = {};
     for (const b of bedOccupancies) {
-      if (!totals[b.wardType]) totals[b.wardType] = { occupied: 0, total: 0 };
-      totals[b.wardType].occupied += b.occupiedBeds;
-      totals[b.wardType].total += b.totalBeds;
+      if (!totals[b.name]) totals[b.name] = { occupied: 0, total: 0 };
+      totals[b.name].occupied += b.occupiedBeds;
+      totals[b.name].total += b.totalBeds;
     }
 
     const bedOccupancyData = Object.entries(totals).map(([ward, counts]) => ({
-      name: ward.replace(/_/g, " "),
+      name: ward,
       "Occupied Beds": counts.occupied,
       "Total Beds": counts.total,
       rate: counts.total > 0 ? Math.round((counts.occupied / counts.total) * 100) : 0
@@ -98,14 +98,14 @@ export class ReportsService {
       this.prisma.referral.groupBy({ by: ['status'], _count: { id: true } }),
       this.prisma.hospital.findMany({
         include: {
-          beds: true,
+          wards: true,
           _count: { select: { referralsSent: true, referralsReceived: true } },
         },
       }),
     ]);
 
-    const totalBeds = hospitals.reduce((sum, h) => sum + h.beds.reduce((s, b) => s + b.totalBeds, 0), 0);
-    const occupiedBeds = hospitals.reduce((sum, h) => sum + h.beds.reduce((s, b) => s + b.occupiedBeds, 0), 0);
+    const totalBeds = hospitals.reduce((sum, h) => sum + h.wards.reduce((s, b) => s + b.totalBeds, 0), 0);
+    const occupiedBeds = hospitals.reduce((sum, h) => sum + h.wards.reduce((s, b) => s + b.occupiedBeds, 0), 0);
 
     return {
       totalHospitals,
@@ -121,8 +121,8 @@ export class ReportsService {
         sentCount: h._count.referralsSent,
         receivedCount: h._count.referralsReceived,
         bedOccupancy: {
-          total: h.beds.reduce((s, b) => s + b.totalBeds, 0),
-          occupied: h.beds.reduce((s, b) => s + b.occupiedBeds, 0),
+          total: h.wards.reduce((s, b) => s + b.totalBeds, 0),
+          occupied: h.wards.reduce((s, b) => s + b.occupiedBeds, 0),
         },
       })),
     };
@@ -179,7 +179,6 @@ export class ReportsService {
         patient: true,
         referringHospital: true,
         receivingHospital: true,
-        targetSpecialist: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -187,7 +186,7 @@ export class ReportsService {
     const headers = [
       'Referral ID', 'Patient Name', 'National ID', 'Gender', 'DOB',
       'Diagnosis', 'Status', 'From Hospital', 'To Hospital',
-      'Target Ward', 'Specialist', 'Transport', 'Date Created',
+      'Target Ward', 'Transport', 'Date Created',
     ];
 
     const rows = referrals.map(r => [
@@ -200,8 +199,7 @@ export class ReportsService {
       r.status,
       r.referringHospital.name,
       r.receivingHospital.name,
-      r.targetWardType || '',
-      r.targetSpecialist ? `Dr. ${r.targetSpecialist.firstName} ${r.targetSpecialist.lastName}` : '',
+      r.targetWardName || '',
       r.transportType || 'AMBULANCE',
       r.createdAt.toISOString().split('T')[0],
     ]);

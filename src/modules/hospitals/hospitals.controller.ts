@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Param, Patch, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Param, Patch, Put, Body, UseGuards, Req } from '@nestjs/common';
 import { HospitalsService } from './hospitals.service';
 import { CreateHospitalDto } from './dto/create-hospital.dto';
-import { AddBedCapacityDto } from './dto/add-bed-capacity.dto';
+import { CreateWardDto } from './dto/create-ward.dto';
 import { AddSpecialistDto } from './dto/add-specialist.dto';
-import { RecalibrateBedDto } from './dto/recalibrate-bed.dto';
+import { UpdateSpecialistDto } from './dto/update-specialist.dto';
+import { RecalibrateWardDto } from './dto/recalibrate-ward.dto';
 import { AuthGuard } from '../../guards/auth.guard';
 import { ApiTags, ApiBearerAuth, ApiOperation, ApiResponse, ApiParam } from '@nestjs/swagger';
 import { SpecialistStatus } from '@prisma/client';
@@ -72,37 +73,37 @@ export class HospitalsController {
     return this.hospitalsService.getDashboard(hospitalId);
   }
 
-  // ──────────────────────────────── Bed Capacity Management ────────────────────────────────
+  // ──────────────────────────────── Ward Capacity Management ────────────────────────────────
 
   @ApiOperation({
-    summary: 'Add a ward/bed configuration to a hospital',
-    description: 'Configures bed capacity for a specific ward type (e.g. ICU, MATERNITY, SURGICAL) at a hospital.',
+    summary: 'Add a ward configuration to a hospital',
+    description: 'Configures bed capacity for a specific ward at a hospital.',
   })
   @ApiParam({ name: 'hospitalId', description: 'Hospital UUID' })
-  @ApiResponse({ status: 201, description: 'Bed capacity added.' })
+  @ApiResponse({ status: 201, description: 'Ward added.' })
   @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
-  @Post(':hospitalId/beds')
-  addBedCapacity(@Param('hospitalId') hospitalId: string, @Body() dto: AddBedCapacityDto, @Req() req) {
-    return this.hospitalsService.addBedCapacity(hospitalId, dto, req.user);
+  @Post(':hospitalId/wards')
+  addWard(@Param('hospitalId') hospitalId: string, @Body() dto: CreateWardDto, @Req() req) {
+    return this.hospitalsService.addWard(hospitalId, dto, req.user);
   }
 
   @ApiOperation({
     summary: 'Update bed occupancy for a ward',
     description: 'Updates the number of occupied beds. Used by receiving facility administrators to keep the dashboard current.',
   })
-  @ApiParam({ name: 'bedId', description: 'BedCapacity UUID' })
-  @ApiResponse({ status: 200, description: 'Bed occupancy updated.' })
+  @ApiParam({ name: 'wardId', description: 'Ward UUID' })
+  @ApiResponse({ status: 200, description: 'Ward occupancy updated.' })
   @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
-  @Patch('beds/:bedId')
-  updateBedCapacity(@Param('bedId') bedId: string, @Body('occupiedBeds') occupiedBeds: number, @Req() req) {
-    return this.hospitalsService.updateBedCapacity(bedId, occupiedBeds, req.user);
+  @Patch('wards/:wardId')
+  updateWardOccupancy(@Param('wardId') wardId: string, @Body('occupiedBeds') occupiedBeds: number, @Req() req) {
+    return this.hospitalsService.updateWardOccupancy(wardId, occupiedBeds, req.user);
   }
 
   @ApiOperation({ summary: 'Force recalibrate bed occupancy (Admin Only)' })
   @Roles(Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
-  @Patch('beds/:bedId/recalibrate')
-  recalibrate(@Param('bedId') bedId: string, @Body() dto: RecalibrateBedDto, @Req() req) {
-    return this.hospitalsService.recalibrateBedCapacity(bedId, dto.occupiedBeds, req.user);
+  @Patch('wards/:wardId/recalibrate')
+  recalibrateWard(@Param('wardId') wardId: string, @Body() dto: RecalibrateWardDto, @Req() req) {
+    return this.hospitalsService.recalibrateWardOccupancy(wardId, dto.occupiedBeds, req.user);
   }
 
   // ──────────────────────────────── Specialist Management ────────────────────────────────
@@ -133,5 +134,21 @@ export class HospitalsController {
     @Req() req
   ) {
     return this.hospitalsService.updateSpecialistStatus(specialistId, status, req.user);
+  }
+
+  @ApiOperation({
+    summary: 'Edit specialist details',
+    description: 'Updates a specialist name, discipline, ward assignment, and shift schedule.',
+  })
+  @ApiParam({ name: 'specialistId', description: 'Specialist UUID' })
+  @ApiResponse({ status: 200, description: 'Specialist updated.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.FOCAL_PERSON, Role.SYS_ADMIN)
+  @Put('specialists/:specialistId')
+  updateSpecialist(
+    @Param('specialistId') specialistId: string,
+    @Body() dto: UpdateSpecialistDto,
+    @Req() req
+  ) {
+    return this.hospitalsService.updateSpecialist(specialistId, dto, req.user);
   }
 }

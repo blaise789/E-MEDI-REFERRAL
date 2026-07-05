@@ -22,12 +22,12 @@ export class CreateReferralDto {
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  targetWardType?: string;
+  targetWardName?: string;
 
   @ApiProperty({ required: false })
   @IsOptional()
   @IsString()
-  targetSpecialistId?: string;
+  assignedSpecialistId?: string;
 
   @ApiProperty()
   @IsString()

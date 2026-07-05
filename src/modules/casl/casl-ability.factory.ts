@@ -6,7 +6,7 @@ import {
   InferSubjects,
 } from '@casl/ability';
 import { Injectable } from '@nestjs/common';
-import { User, Referral, Hospital, BedCapacity, Specialist, Patient, AuditLog } from '@prisma/client';
+import { User, Referral, Hospital, Ward, Specialist, Patient, AuditLog } from '@prisma/client';
 import { Role } from '@prisma/client';
 
 export enum Action {
@@ -20,7 +20,7 @@ export enum Action {
 export type Subjects =
   | 'Referral'
   | 'Hospital'
-  | 'BedCapacity'
+  | 'Ward'
   | 'Specialist'
   | 'Patient'
   | 'AuditLog'
@@ -42,12 +42,12 @@ export class CaslAbilityFactory {
       can(Action.Manage, 'AuditLog');
       can(Action.Read, 'Referral'); // Impartial observer for clinical data
       can(Action.Read, 'Patient');
-      can(Action.Read, 'BedCapacity');
+      can(Action.Read, 'Ward');
       can(Action.Read, 'Specialist');
     } else if (user.role === Role.HOSPITAL_ADMIN) {
       can(Action.Read, 'all');
       can(Action.Manage, 'Hospital', { id: user.hospitalId } as any);
-      can(Action.Manage, 'BedCapacity', { hospitalId: user.hospitalId } as any);
+      can(Action.Manage, 'Ward', { hospitalId: user.hospitalId } as any);
       can(Action.Manage, 'Specialist', { hospitalId: user.hospitalId } as any);
       can(Action.Create, 'Referral');
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
@@ -57,12 +57,12 @@ export class CaslAbilityFactory {
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
       can(Action.Update, 'Referral', { referringHospitalId: user.hospitalId } as any);
       can(Action.Create, 'Referral');
-      can(Action.Manage, 'BedCapacity', { hospitalId: user.hospitalId } as any);
+      can(Action.Manage, 'Ward', { hospitalId: user.hospitalId } as any);
       can(Action.Manage, 'Specialist', { hospitalId: user.hospitalId } as any);
     } else if (user.role === Role.CLINICIAN) {
       can(Action.Read, 'Hospital');
       can(Action.Read, 'Patient');
-      can(Action.Read, 'BedCapacity');
+      can(Action.Read, 'Ward');
       can(Action.Read, 'Specialist');
       
       can(Action.Create, 'Referral');
@@ -93,8 +93,8 @@ export class CaslAbilityFactory {
 
         // Robust property-based fallback for Prisma objects and partial objects
         if ((item as any).patientId && (item as any).referringHospitalId) return 'Referral';
-        if ((item as any).wardType !== undefined || (item as any).totalBeds !== undefined) return 'BedCapacity';
-        if ((item as any).discipline !== undefined || (item as any).status !== undefined) return 'Specialist';
+        if ((item as any).name !== undefined && (item as any).totalBeds !== undefined) return 'Ward';
+        if ((item as any).shiftStartTime !== undefined || (item as any).status !== undefined) return 'Specialist';
         if ((item as any).level && (item as any).location) return 'Hospital';
         if ((item as any).email && (item as any).role) return 'User';
         

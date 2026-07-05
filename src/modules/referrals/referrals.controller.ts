@@ -103,6 +103,17 @@ export class ReferralsController {
   }
 
   @ApiOperation({
+    summary: 'Get hospital recommendations for emergency transfers',
+    description: 'Finds the best hospitals based on matching ward capacity and active specialist schedules.',
+  })
+  @ApiQuery({ name: 'targetWardName', required: true, description: 'The requested ward name (e.g. Surgery)' })
+  @ApiResponse({ status: 200, description: 'List of recommended hospitals.' })
+  @Get('recommendations')
+  getRecommendations(@Query('targetWardName') targetWardName: string) {
+    return this.referralsService.getRecommendations(targetWardName);
+  }
+
+  @ApiOperation({
     summary: "Get referral details",
     description: "Returns a complete referral record including patient data, hospital relations, audit logs, and counter-referral notes.",
   })
