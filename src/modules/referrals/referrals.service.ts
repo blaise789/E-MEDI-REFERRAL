@@ -124,10 +124,12 @@ export class ReferralsService {
 
     // Send patient email if they have one
     if (referral.patient.email) {
-      await this.notificationsService.sendPatientEmail(
+      this.notificationsService.sendPatientEmail(
         referral.patient,
         referral,
-      );
+      ).catch(error => {
+        console.error('Failed to send email to patient:', error);
+      });
     }
 
     return referral;
