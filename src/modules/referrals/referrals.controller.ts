@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, Query, Res } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, UseGuards, Req, Query, Res, Delete } from '@nestjs/common';
 import { ReferralsService } from './referrals.service';
 import { CreateReferralDto } from './dto/create-referral.dto';
 import { CreateCounterReferralDto } from './dto/create-counter-referral.dto';
@@ -122,5 +122,18 @@ export class ReferralsController {
   @Get(":id")
   findOne(@Param("id") id: string) {
     return this.referralsService.findOne(id);
+  }
+
+  @ApiOperation({
+    summary: "Delete a referral",
+    description: "Deletes a referral by ID. SYS_ADMIN and HOSPITAL_ADMIN only.",
+  })
+  @ApiParam({ name: "id", description: "Referral UUID" })
+  @ApiResponse({ status: 200, description: "Referral deleted." })
+  @Roles(Role.SYS_ADMIN, Role.HOSPITAL_ADMIN)
+  @CheckPolicies((ability) => ability.can(Action.Delete, 'Referral'))
+  @Delete(":id")
+  remove(@Param("id") id: string, @Req() req) {
+    return this.referralsService.remove(id, req.user);
   }
 }

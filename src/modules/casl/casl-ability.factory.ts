@@ -41,6 +41,7 @@ export class CaslAbilityFactory {
       can(Action.Manage, 'User');
       can(Action.Manage, 'AuditLog');
       can(Action.Read, 'Referral'); // Impartial observer for clinical data
+      can(Action.Delete, 'Referral');
       can(Action.Read, 'Patient');
       can(Action.Read, 'Ward');
       can(Action.Read, 'Specialist');
@@ -52,6 +53,8 @@ export class CaslAbilityFactory {
       can(Action.Create, 'Referral');
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);
       can(Action.Update, 'Referral', { referringHospitalId: user.hospitalId } as any);
+      can(Action.Delete, 'Referral', { referringHospitalId: user.hospitalId } as any);
+      can(Action.Delete, 'Referral', { receivingHospitalId: user.hospitalId } as any);
     } else if (user.role === Role.FOCAL_PERSON) {
       can(Action.Read, 'all');
       can(Action.Update, 'Referral', { receivingHospitalId: user.hospitalId } as any);

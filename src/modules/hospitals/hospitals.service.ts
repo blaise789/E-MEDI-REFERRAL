@@ -318,4 +318,21 @@ export class HospitalsService {
     this.clinicalGateway.broadcastSpecialistUpdate(updated.hospitalId, updated);
     return updated;
   }
+
+  /**
+   * Remove a ward from a hospital.
+   */
+  async removeWard(wardId: string, user: any) {
+    const ward = await this.prisma.ward.findUnique({ where: { id: wardId } });
+    if (!ward) throw new HttpException("Ward not found", HttpStatus.NOT_FOUND);
+
+    const ability = this.caslAbilityFactory.createForUser(user);
+    if (!ability.can(Action.Manage, subject("Ward" as any, ward as any))) {
+      throw new ForbiddenException(
+        "You are not authorized to manage wards for this hospital",
+      );
+    }
+
+    return this.prisma.ward.delete({ where: { id: wardId } });
+  }
 }

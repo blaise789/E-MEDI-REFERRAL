@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Param, Patch, Put, Body, UseGuards, Req } from '@nestjs/common';
+import { Controller, Get, Post, Param, Patch, Put, Body, UseGuards, Req, Delete } from '@nestjs/common';
 import { HospitalsService } from './hospitals.service';
 import { CreateHospitalDto } from './dto/create-hospital.dto';
 import { CreateWardDto } from './dto/create-ward.dto';
@@ -104,6 +104,15 @@ export class HospitalsController {
   @Patch('wards/:wardId/recalibrate')
   recalibrateWard(@Param('wardId') wardId: string, @Body() dto: RecalibrateWardDto, @Req() req) {
     return this.hospitalsService.recalibrateWardOccupancy(wardId, dto.occupiedBeds, req.user);
+  }
+
+  @ApiOperation({ summary: 'Delete a ward' })
+  @ApiParam({ name: 'wardId', description: 'Ward UUID' })
+  @ApiResponse({ status: 200, description: 'Ward deleted.' })
+  @Roles(Role.HOSPITAL_ADMIN, Role.SYS_ADMIN)
+  @Delete('wards/:wardId')
+  removeWard(@Param('wardId') wardId: string, @Req() req) {
+    return this.hospitalsService.removeWard(wardId, req.user);
   }
 
   // ──────────────────────────────── Specialist Management ────────────────────────────────

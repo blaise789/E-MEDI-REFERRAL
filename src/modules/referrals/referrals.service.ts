@@ -346,18 +346,24 @@ export class ReferralsService {
     // ── Automate Bed Count on Lifecycle Events ────────────────────────────
     if (wardKey) {
       if (status === "ADMITTED") {
-        const ward = await this.prisma.ward.update({
-          where: wardKey as any,
-          data: { occupiedBeds: { increment: 1 } },
-        });
-        this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
-      } else if (status === "DISCHARGED" || status === "COUNTER_REFERRED") {
-        if (existingReferral.status === "ADMITTED") {
+        const wardExists = await this.prisma.ward.findUnique({ where: wardKey as any });
+        if (wardExists) {
           const ward = await this.prisma.ward.update({
             where: wardKey as any,
-            data: { occupiedBeds: { decrement: 1 } },
+            data: { occupiedBeds: { increment: 1 } },
           });
           this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
+        }
+      } else if (status === "DISCHARGED" || status === "COUNTER_REFERRED") {
+        if (existingReferral.status === "ADMITTED") {
+          const wardExists = await this.prisma.ward.findUnique({ where: wardKey as any });
+          if (wardExists) {
+            const ward = await this.prisma.ward.update({
+              where: wardKey as any,
+              data: { occupiedBeds: { decrement: 1 } },
+            });
+            this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
+          }
         }
       }
     }
@@ -421,16 +427,20 @@ export class ReferralsService {
 
     // Restore bed capacity on discharge
     if (existingReferral.targetWardName) {
-      const ward = await this.prisma.ward.update({
-        where: {
-          hospitalId_name: {
-            hospitalId: existingReferral.receivingHospitalId,
-            name: existingReferral.targetWardName,
-          },
-        },
-        data: { occupiedBeds: { decrement: 1 } },
-      });
-      this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
+      const wardKey = {
+        hospitalId_name: {
+          hospitalId: existingReferral.receivingHospitalId,
+          name: existingReferral.targetWardName,
+        }
+      };
+      const wardExists = await this.prisma.ward.findUnique({ where: wardKey });
+      if (wardExists) {
+        const ward = await this.prisma.ward.update({
+          where: wardKey,
+          data: { occupiedBeds: { decrement: 1 } },
+        });
+        this.clinicalGateway.broadcastCapacityUpdate(existingReferral.receivingHospitalId, ward);
+      }
     }
 
     const counterReferral = await this.prisma.counterReferral.create({
@@ -486,10 +496,20 @@ export class ReferralsService {
 
     // Free up the bed
     if (referral.targetWardName) {
-      await this.prisma.ward.update({
-        where: { hospitalId_name: { hospitalId: referral.receivingHospitalId, name: referral.targetWardName } },
-        data: { occupiedBeds: { decrement: 1 } },
-      });
+      const wardKey = {
+        hospitalId_name: { 
+          hospitalId: referral.receivingHospitalId, 
+          name: referral.targetWardName 
+        }
+      };
+      const wardExists = await this.prisma.ward.findUnique({ where: wardKey });
+      if (wardExists) {
+        const ward = await this.prisma.ward.update({
+          where: wardKey,
+          data: { occupiedBeds: { decrement: 1 } },
+        });
+        this.clinicalGateway.broadcastCapacityUpdate(referral.receivingHospitalId, ward);
+      }
     }
 
     const newStatus = dto.counterRefer ? 'COUNTER_REFERRED' : 'DISCHARGED';
@@ -615,5 +635,27 @@ export class ReferralsService {
     doc.text(`Date of Generation: ${format(new Date(), "PPP p")}`, { align: "center" });
 
     doc.end();
+  }
+
+  async remove(id: string, user: any) {
+    const existing = await this.prisma.referral.findUnique({ where: { id } });
+    if (!existing) {
+      throw new ForbiddenException("Referral not found");
+    }
+
+    const ability = this.caslAbilityFactory.createForUser(user);
+    if (!ability.can(Action.Delete, subject("Referral", existing as any))) {
+      throw new ForbiddenException("You are not authorized to delete this referral");
+    }
+
+    // Free up ward bed if admitted
+    if (existing.status === 'ADMITTED' && existing.targetWardName) {
+      await this.prisma.ward.updateMany({
+        where: { hospitalId: existing.receivingHospitalId, name: existing.targetWardName },
+        data: { occupiedBeds: { decrement: 1 } },
+      });
+    }
+
+    return this.prisma.referral.delete({ where: { id } });
   }
 }
